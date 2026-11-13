@@ -45,12 +45,20 @@ static int32_t sine(uint32_t ph)                /* a full cycle over 2^32 -> -32
 #ifdef DINGHY_OUTTEST
 #include "outtest.h"                            /* M0 output test (24-bit, left only): PLAY runs it */
 #endif
+#ifdef DINGHY_ENGINE
+static void eng_audio(int32_t *out, uint32_t n);
+static void eng_note(uint32_t note, uint32_t vel);
+#endif
 
 static void app_audio(int32_t *out, uint32_t n)
 {
     uint32_t v, i;
 #ifdef DINGHY_OUTTEST
     outtest_audio(out, n);
+    return;
+#endif
+#ifdef DINGHY_ENGINE
+    eng_audio(out, n);                          /* the bass engine (engine_test.h) instead of the sines */
     return;
 #endif
     for (v = 0; v < NV; v++) {
@@ -92,6 +100,9 @@ static void play(uint32_t note, uint32_t vel)
     voice[pick].inc = INC_C9[note % 12u] >> (10u - note / 12u);
     voice[pick].gate = (int32_t)(vel * 90u);    /* 127 -> 11430: four voices stay under full scale */
     last_note = note;
+#ifdef DINGHY_ENGINE
+    eng_note(note, vel);
+#endif
 }
 static void stop(uint32_t note)
 {
@@ -99,6 +110,9 @@ static void stop(uint32_t note)
     for (v = 0; v < NV; v++)
         if (voice[v].note == note)
             voice[v].gate = 0;
+#ifdef DINGHY_ENGINE
+    eng_note(note, 0);
+#endif
 }
 static int quiet(void)                          /* nothing sounds, not even a release */
 {
@@ -115,6 +129,9 @@ static int quiet(void)                          /* nothing sounds, not even a re
 #define KEY0 53u                                /* key 0 = F3 */
 #ifdef DINGHY_BENCH
 #include "bench.h"                              /* M0 benchmark (tools/bench.sh): PLAY runs it */
+#endif
+#ifdef DINGHY_ENGINE
+#include "engine_test.h"                        /* the bass engine on the keys, KNOB1 = patch, CPU shown */
 #endif
 static int black(uint32_t note) { return (0x54Au >> (note % 12u)) & 1u; }
 
@@ -229,8 +246,13 @@ static void app_main(void)
         set.oct = 0, set.ch = 0;
 
     lcd_fill(0, 0, 240, 240, C_BLACK);
+#ifdef DINGHY_ENGINE
+    eng_init();
+    draw_text_box(0, 52, 240, &FONT_S, "bass engine test  KNOB1 = patch", C_OFF, 1);
+#else
     draw_text_box(0, 18, 240, &FONT_L, APP_NAME, C_ACC, 1);
     draw_text_box(0, 52, 240, &FONT_S, "a sine to build on  v" APP_VER, C_OFF, 1);
+#endif
 
     for (;;) {
         uint32_t keys, down, up, rel, b, lit = 0, out_ch = set.ch ? set.ch - 1u : 0u, st;
@@ -306,6 +328,9 @@ static void app_main(void)
 
         midi_in();
         if (clk_bpm && fm1_ms - clk_t0 > 2000u) clk_bpm = 0, clk_run = 0;   /* the clock has stopped coming */
+#ifdef DINGHY_ENGINE
+        eng_ui();
+#endif
 
         oct = (int8_t)set.oct;
         base = (uint32_t)((int32_t)KEY0 + 12 * oct);

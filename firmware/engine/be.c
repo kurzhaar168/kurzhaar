@@ -19,7 +19,9 @@ volatile uint32_t be_prof_skip;                  /* 1 ladder, 2 decimators, 4 os
 #define BE_SKIP(b) 0
 #endif
 
-#define OS 4                                     /* oversampling of everything before the decimators (4x -> 2x -> 1x) */
+#define OS 4                                     /* oversampling of the oscillators and the ladder (at 2x the
+                                                    ladder's nonlinearity aliased to -42 dB with drive: measured) */
+#define BE_PRE_G 0.372058856f                    /* tan(pi * 20 kHz / 176.4 kHz): the oscillators' low-pass */
 #define ACCENT_VEL 100u                          /* velocity from which a note counts as accented */
 
 /* ------------------------------------------------------------------ patch */
@@ -310,7 +312,7 @@ BE_HOT static void be_render_hot(be_t *e, float *out, uint32_t n)
             uint32_t q;
             float x4[2];
             for (q = 0; q < 2u; q++) {
-                float t1 = e->ph1, t2 = e->ph2, sp, m, y, v;
+                float t1 = e->ph1, t2 = e->ph2, sp, m, y;
                 if (BE_SKIP(4u)) m = 0.25f; else {
                 m = p->osc1_level * osc(p->osc1_wave, t1, dt1, pw1, &e->tri1);
                 if (p->osc2_level > 0.0f)
@@ -324,16 +326,29 @@ BE_HOT static void be_render_hot(be_t *e, float *out, uint32_t n)
                 e->ph1 = t1 + dt1; if (e->ph1 >= 1.0f) { e->ph1 -= 1.0f; e->subcnt++; }
                 e->ph2 = t2 + dt2; if (e->ph2 >= 1.0f) e->ph2 -= 1.0f;
                 }
+                {                                /* the oscillators' own bandwidth: a 2-pole low-pass at ~20 kHz
+                                                    (Butterworth, TPT) before the ladder. Analog oscillators do not
+                                                    hand the filter 88 kHz of harmonics either; without it the
+                                                    ladder's input stage folds them back into the audio band. */
+                    const float pg = BE_PRE_G, pk = 1.41421356f;
+                    const float a1 = 1.0f / (1.0f + pg * (pg + pk)), a2 = pg * a1, a3 = pg * a2;
+                    float v3 = m - e->pre2, v1 = a1 * e->pre1 + a2 * v3, v2 = e->pre2 + a2 * e->pre1 + a3 * v3;
+                    e->pre1 = 2.0f * v1 - e->pre1; e->pre2 = 2.0f * v2 - e->pre2;
+                    m = v2;
+                }
 
                 y = BE_SKIP(1u) ? m : ladder(e, m * drive_g * comp, g, r, p->pole2);
-                v = y * amp;
+                x4[q] = y * amp;
+            }
+            {                                    /* at 2x: saturation and the soft limit (their harmonics still
+                                                    have room above the audio band before the last decimator) */
+                float v = BE_SKIP(2u) ? x4[1] : halfband(&e->hb4, BE_HB4_ODD, BE_HB4_NODD, 7u, x4[0], x4[1]);
                 if (p->sat > 0.0f)               /* asymmetric soft saturation, unity gain for small signals */
                     v = (be_tanh(v * satg + satb) - sat0) * satn;
                 if (v > 0.8f) v = 0.8f + 0.18f * be_tanh((v - 0.8f) * (1.0f / 0.18f));     /* soft limit: < 0.98 */
                 else if (v < -0.8f) v = -0.8f - 0.18f * be_tanh((-v - 0.8f) * (1.0f / 0.18f));
-                x4[q] = v;
+                x2[k] = v;
             }
-            x2[k] = BE_SKIP(2u) ? x4[1] : halfband(&e->hb4, BE_HB4_ODD, BE_HB4_NODD, 7u, x4[0], x4[1]);
         }
         o = BE_SKIP(2u) ? x2[1] : halfband(&e->hb2, BE_HB_ODD, BE_HB_NODD, 31u, x2[0], x2[1]);
 

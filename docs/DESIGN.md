@@ -120,8 +120,27 @@ Constraints:
    a **golden reference**: a test renders both and compares them sample by sample (tolerance in dB), so the port can
    never quietly lose the sound.
 4. **Spend the CPU on sound.** One voice only: oversampling, per-stage nonlinearity and band-limited oscillators
-   are where the budget goes. Budget: whole voice < 50 % of the audio interrupt (measured with `fm1_ticks()`), with
+   are where the budget goes. Budget: whole voice ≈ 50–56 % of the audio interrupt as built (see 4.3a), measured with `fm1_ticks()`; with
    the rest held back for headroom.
+
+### 4.3a Implementation as built (M1, 2026-11-13)
+
+- Oscillators (polyBLEP, flip-flop sub) **and the ladder at 4x** (176.4 kHz); a 2-pole 20 kHz low-pass between them
+  (an analog oscillator's own bandwidth: without it the ladder's input stage folded ultrasonic harmonics back into
+  the audio band, e.g. a 64 Hz alias at -69 dB on C4). The ladder at 2x was measured and rejected (-42 dB aliasing
+  with drive).
+- Saturation and soft limit at 2x; polyphase half-band decimators 4x -> 2x (19 taps) -> 1x (63 taps, **passband
+  to 18 kHz**, -97 dB from 26.1 kHz: half the taps of a 20 kHz passband, nothing a bass part needs above 18 kHz).
+  The aliasing criterion is measured over 20 Hz..18 kHz accordingly.
+- Measured: aliasing -88 dB (saw C7), -95 dB (C6), < -100 dB at C4 and below with moderate drive; no bass loss
+  with resonance (bass_comp 1); no clicks. **Known limit:** maximum drive with resonance ~0.6 reaches a near-DC
+  alias around -52 dB at C3 (the input stage is then almost a hard clipper) — to revisit (cap drive, or a better
+  nonlinearity solver).
+- **CPU on the FM-1** (engine from RAM, `-O2`, float): 50–56 % of the audio interrupt's budget for one block (the
+  benchmark varies ±3 % with code layout). The FPU costs ~11 cycles per dependent operation and divides cost the
+  same as multiplies, so the engine is bound by operation count, not by divisions or code fetch (both tried). **In
+  practice**: the engine in the audio interrupt, keys and USB MIDI notes with a running 120 BPM clock: under 60 %
+  peak, no glitches (user test, 2026-11-13). Budget for the rest: the sequencer is per-sample comparisons (small).
 
 ### 4.4 Patches
 

@@ -67,6 +67,7 @@ typedef struct {
     uint32_t rng;
     /* filter: ladder states and the last values (the nonlinearities' operating points) */
     float s[4], y[4], u;
+    float pre1, pre2;                            /* the oscillators' 20 kHz low-pass */
     float spread_cut, spread_res;                /* component spread (analog) */
     /* envelopes */
     be_env_t fe, ae;

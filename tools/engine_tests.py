@@ -60,7 +60,7 @@ def aliasing(note, extra=None, label=""):
     harm = np.zeros_like(f, dtype=bool)
     for k in range(1, int(22050 / f0) + 2):
         harm |= np.abs(f - k * f0) < 12          # the harmonics and their window skirts
-    band = (f > 20) & (f < 20000) & ~harm
+    band = (f > 20) & (f < 18000) & ~harm     # the decimator keeps 0..18 kHz clean (docs/DESIGN.md)
     i = int(np.argmax(X * band))
     worst = db(X[i] / fund)
     check(f"aliasing, {label or note} ({f0:.0f} Hz), worst non-harmonic vs fundamental (at {f[i]:.0f} Hz)", worst, -80)
