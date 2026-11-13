@@ -40,6 +40,8 @@ void be_patch_default(be_patch_t *p)
     p->vel_sens = 0.5f; p->accent = 0.5f;
     p->glide = 0.06f; p->glide_mode = BE_GLIDE_LEGATO;
     p->analog = 0.5f; p->sat = 0.2f; p->hpf = 20.0f; p->level = 0.0f;
+    p->lfo_rate = 3.0f; p->lfo_depth = 0.0f; p->lfo_dest = 1.0f; p->lfo_shape = 0.0f;
+    p->verb_mix = 0.0f; p->verb_decay = 1.5f; p->verb_tone = 0.5f; p->verb_lowcut = 200.0f;
 }
 
 static float coef(float tau, float fs)           /* one-pole coefficient: the step toward the target per sample */

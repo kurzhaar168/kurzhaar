@@ -1,0 +1,39 @@
+# A tour of the bass machine's interface in host mode: DINGHY_APP=bass tests/run_host.sh tests/scripts/bass_tour.txt
+# buttons: 0 OCT- 1 OCT+ 2 FX 3 SEL 4 ENV 5 LFO 6 EDIT 7 GLO 8 HOME 9 SAVE 10 ARP 11 SEQ 12 PLAY 13 REC
+# encoders: 0 SELECT (cutoff) 1 ALGORITHM (resonance) 2..5 KNOB1..4 6 PRESETS; white keys: 0 2 4 6 7 9 11 12 14 ...
+500 shot
+600 btn 12
+1350 shot
+1400 btn 11
+1600 keys 0x80
+1650 keys 0
+1900 shot
+2000 keys 0x2
+2050 keys 0
+2100 enc 2 1
+2400 shot
+2500 btn 4
+2600 enc 0 8
+2700 enc 1 30
+2950 shot
+3000 btn 4
+3250 shot
+3300 btn 6
+3400 enc 4 30
+3650 shot
+3700 btn 3
+3950 shot
+4000 btn 2
+4250 shot
+4300 btn 7
+4550 shot
+4600 btn 12
+4700 btn 13
+4800 keys 0x1
+4850 keys 0
+4900 keys 0x2
+4950 keys 0
+5000 keys 0x80
+5050 keys 0
+5300 shot
+5400 end

@@ -45,8 +45,9 @@ LOADER_NAME = b"usb_hid_ota.bin"    # the file name the SPL looks for
 DOCKER_IMAGE = os.environ.get("JIELI_DOCKER_IMAGE", "debian:bookworm-slim")
 CFLAGS = ["-Os", "-ffunction-sections", "-fno-builtin", "-Wall", "-Wno-unused-function"]   # keep -Os: with -O2 (unity
                                     # build, usb.c inside) the FM-1's USB-MIDI IN babbled on the device (OberVave, 2026-10-13)
+APP = os.environ.get("DINGHY_APP", "dinghy")                  # the app: firmware/src/<APP>.c (bass: the bass machine)
 ENGINE_OPT = os.environ.get("DINGHY_ENGINE_OPT", "-O2")     # the bass engine's optimisation (firmware/engine)
-ENGINE_SRCS = ["be.c", "clk.c", "player.c"]                  # each its own object (unused ones: --gc-sections)
+ENGINE_SRCS = ["be.c", "clk.c", "player.c", "seq.c", "verb.c"]                  # each its own object (unused ones: --gc-sections)
 # the checks read the disassembly: decode for the CPU the code was built for (-mcpu=r3 has FPU instructions; read
 # as the default CPU, their second halfwords look like other instructions, a "call r0" among them)
 DIS_CPU = [f for f in os.environ.get("DINGHY_DEFS", "").split() if f.startswith("-mcpu=")][-1:]
@@ -64,8 +65,9 @@ BOARD_PREFIX = {"fm1": "FM-1_99", "smk37": "SMK-37 Pro_99"}   # identity: prefix
 BOARD_DEFS = {"fm1": [], "smk37": ["-DBOARD_SMK37=1"]}
 MODELS = {"pro": "SMK-37 Pro", "elite": "SMK-37 Elite", "mke": "MKE-P37"}   # smk37: one keyboard, three names
 DATA_FAMILY = "DINGHY"              # the SMK store's owner tag (store.h): 1..7 of A-Z 0-9. Your fork: your own
-SCREEN_NAME = "DINGHY"              # the update loader's screen (FM-1, ldr_screen.c): the name and its colour (RGB565)
-SCREEN_COLOUR = 0xB47F              # lilac, #B48CFF
+SCREEN_NAME = os.environ.get("DINGHY_SCREEN_NAME", "LUCCA" if os.environ.get("DINGHY_APP") == "bass" else "DINGHY")
+                                    # the update loader's screen (FM-1, ldr_screen.c): the name and its colour (RGB565)
+SCREEN_COLOUR = 0xFDA8 if os.environ.get("DINGHY_APP") == "bass" else 0xB47F   # Lucca: amber #FFB547; Dinghy: lilac
 PRODUCT = "FM-1_990"                # Dinghy: 99N (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
 VERSION = None                      # APP_VER for release builds
 
@@ -181,7 +183,7 @@ def build_app():
     cmds = [("cc", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
             ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
             ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
-            ("cc", *flags, "-c", FW / "src" / "dinghy.c", "-o", OUT / "dinghy.o")]
+            ("cc", *flags, "-c", FW / "src" / f"{APP}.c", "-o", OUT / "dinghy.o")]
     # the bass engine: its own object, optimised for speed (DSP at a long FPU latency wants scheduling); the rest
     # stays -Os (with -O2 the unity build's USB-MIDI IN babbled, see CFLAGS)
     eflags = [ENGINE_OPT if f == "-Os" else f for f in flags]

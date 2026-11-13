@@ -1,0 +1,11 @@
+# The reverb: FX x3 = the REVERB page; mix up, a long decay; play 6 s, stop, listen to the tail.
+200 btn 2
+300 btn 2
+400 btn 2
+500 enc 2 25
+600 enc 3 12
+800 btn 12
+3000 shot
+6800 btn 12
+7000 shot
+10000 end

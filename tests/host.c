@@ -140,6 +140,9 @@ static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)
     return src;
 }
 static void midi_send(uint32_t st, uint32_t d1, uint32_t d2) { printf("%6u ms  MIDI out %02X %u %u\n", fm1_ms, st, d1, d2); }
+#define FM1_TICKS_PER_US 24u
+static uint32_t fm1_ticks(void) { return fm1_ms * 24000u; }   /* the 24 MHz counter, at the host's millisecond */
+static int midi_get_t(uint8_t *st, uint8_t *d1, uint8_t *d2, uint32_t *t) { *t = fm1_ticks(); return midi_get(st, d1, d2); }
 
 static void app_audio(int32_t *out, uint32_t n);
 static void app_main(void);

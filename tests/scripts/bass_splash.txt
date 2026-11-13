@@ -1,0 +1,8 @@
+# The power-on splash: frames through it
+300 shot
+800 shot
+1300 shot
+1600 shot
+2000 shot
+2600 shot
+4200 end

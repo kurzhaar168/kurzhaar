@@ -37,6 +37,9 @@ typedef struct {                                 /* a patch, in musical units */
     float analog;                                /* 0..1: drift and component spread (0 = perfectly stable) */
     float sat;                                   /* 0..1: output saturation */
     float hpf;                                   /* 0, 20 or 30 Hz sub-sonic high-pass */
+    float verb_mix, verb_decay, verb_tone, verb_lowcut;   /* reverb (verb.c, run by the app): 0..1; s; 0..1; Hz */
+    float lfo_rate, lfo_depth, lfo_dest, lfo_shape;   /* (not in the engine yet) rate 0..6 = 1/32..2 bars; 0..1;
+                                                         0 pitch 1 cutoff 2 pw; 0 tri 1 square 2 S&H */
     float level;                                 /* dB, -24..+6 */
 } be_patch_t;
 

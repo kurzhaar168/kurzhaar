@@ -1,0 +1,18 @@
+# Speed-sensitive cutoff: a slow turn (one detent every 200 ms) then a quick one (one every 15 ms)
+500 enc 0 1
+700 enc 0 1
+900 enc 0 1
+1100 enc 0 1
+1150 shot
+2000 enc 0 -1
+2015 enc 0 -1
+2030 enc 0 -1
+2045 enc 0 -1
+2060 enc 0 -1
+2075 enc 0 -1
+2090 enc 0 -1
+2105 enc 0 -1
+2120 enc 0 -1
+2135 enc 0 -1
+2150 shot
+2500 end
