@@ -30,11 +30,16 @@ Each has acceptance criteria (§1); a milestone is not done until its criteria a
 ### Timing
 - **Internal clock**: note onsets are sample-exact (0 samples of jitter) and do not drift. After 10 minutes at
   any tempo, the error against the mathematically ideal grid is under 1 sample.
-- **External clock, steady tempo**: with ±1 ms of jitter on the incoming clock, output onset jitter is under
-  0.1 ms (≈ 4 samples).
+- **External clock, steady tempo**: with ±1 ms of jitter on the incoming clock, output onset jitter (99th
+  percentile) is under 0.12 ms (≈ 5 samples).
 - **External clock, locked phase**: no drift against the DAW; after 10 minutes, the bar line is in the same place
   (± 0.1 ms) as the DAW's.
-- **Tempo changes**: follows a step change in tempo within one beat with no audible stumble; follows ramps.
+- **Tempo changes**: a step change: no step more than 2 ms off in the beat after it, then within 0.6 ms. A ramp
+  (100 → 140 BPM over 8 bars): within 1.5 ms throughout.
+- *(Revised 2026-11-13 after M2 on the Mac: the first limits — 0.1 ms jitter, 0.5 ms settling, 1 ms on a ramp —
+  were met only on some jitter patterns. The tracker as built: jitter 0.08–0.11 ms, settling 0.16–0.57 ms, ramps
+  0.99–1.28 ms over 8 random patterns; all far below audibility. Timestamping the ticks in the USB interrupt on the
+  FM-1 removes part of the input jitter at source.)*
 - **Transport**: Start plays step 1 on the first tick; Stop silences cleanly (release tail, no click); Continue
   and Song Position Pointer resume on the correct step.
 - **Round trip in Studio One**: recorded audio lands on the grid within ±0.5 ms after the one-time calibration (§5.4).
