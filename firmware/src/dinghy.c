@@ -275,6 +275,10 @@ static void app_main(void)
         if (b & (1u << BTN_OCT_UP) && oct < 2) { set.oct = (uint8_t)(oct + 1); dirty = 1; t_change = fm1_ms; }
 #ifdef DINGHY_BENCH
         if (b & (1u << BTN_PLAY)) bench_run();  /* results stay on screen until a key redraws */
+        {                                       /* and once by itself, 10 s after boot (past the healthy point) */
+            static uint32_t bench_auto;
+            if (!bench_auto && fm1_ms > 10000u) { bench_auto = 1; bench_run(); }
+        }
 #endif
 #ifdef DINGHY_OUTTEST
         if (b & (1u << BTN_PLAY) && !ot_run) outtest_start();

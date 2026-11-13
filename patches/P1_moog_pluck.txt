@@ -1,0 +1,25 @@
+# P1 Moog pluck: one saw into the ladder, low cutoff, a short filter envelope. The classic.
+osc1_wave = 0      # saw
+osc1_level = 1
+drive = 0.35
+cutoff = 180
+res = 0.25
+bass_comp = 0.5
+keytrack = 0.5
+fenv_amt = 3.5
+f_a = 0.001
+f_d = 0.22
+f_s = 0.0
+f_r = 0.12
+a_a = 0.001
+a_d = 0.5
+a_s = 1.0
+a_r = 0.06
+vel_sens = 0.5
+accent = 0.6
+glide = 0.05
+glide_mode = 1     # legato
+analog = 0.5
+sat = 0.2
+hpf = 20
+level = 0

@@ -45,6 +45,10 @@ LOADER_NAME = b"usb_hid_ota.bin"    # the file name the SPL looks for
 DOCKER_IMAGE = os.environ.get("JIELI_DOCKER_IMAGE", "debian:bookworm-slim")
 CFLAGS = ["-Os", "-ffunction-sections", "-fno-builtin", "-Wall", "-Wno-unused-function"]   # keep -Os: with -O2 (unity
                                     # build, usb.c inside) the FM-1's USB-MIDI IN babbled on the device (OberVave, 2026-10-13)
+ENGINE_OPT = os.environ.get("DINGHY_ENGINE_OPT", "-O2")     # the bass engine's optimisation (firmware/engine)
+# the checks read the disassembly: decode for the CPU the code was built for (-mcpu=r3 has FPU instructions; read
+# as the default CPU, their second halfwords look like other instructions, a "call r0" among them)
+DIS_CPU = [f for f in os.environ.get("DINGHY_DEFS", "").split() if f.startswith("-mcpu=")][-1:]
 LINE = re.compile(r"^\s*([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s*\t(.*)$")
 
 # SDK files of AC79NN_SDK_V1.2.1_2023-12-13 (the tested version)
@@ -177,6 +181,10 @@ def build_app():
             ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
             ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
             ("cc", *flags, "-c", FW / "src" / "dinghy.c", "-o", OUT / "dinghy.o")]
+    # the bass engine: its own object, optimised for speed (DSP at a long FPU latency wants scheduling); the rest
+    # stays -Os (with -O2 the unity build's USB-MIDI IN babbled, see CFLAGS)
+    eflags = [ENGINE_OPT if f == "-Os" else f for f in flags]
+    cmds.append(("cc", *eflags, "-c", FW / "engine" / "be.c", "-o", OUT / "engine.o"))
     tc_all(*cmds)
     elf = OUT / "dinghy.elf"
     ld = FW / "app.ld"
@@ -187,15 +195,15 @@ def build_app():
         ld = OUT / "app.ld"
         ld.write_text(txt.replace("LENGTH = 0x8DFBC", f"LENGTH = {APP_SLOT:#X}".replace("0X", "0x")))
     tc("pi32v2/bin/ld", "--gc-sections", "-e", "_start", "-T", ld, OUT / "crt0.o", OUT / "fm1_vec.o",
-       OUT / "fm1_isr.o", OUT / "dinghy.o", "-o", elf)
+       OUT / "fm1_isr.o", OUT / "dinghy.o", OUT / "engine.o", "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
         (OUT / sect).unlink(missing_ok=True)
     *_, syms, dis, rt = tc_all(("common/bin/objcopy", "-O", "binary", "-j", ".text", elf, OUT / "text.bin"),
                                ("common/bin/objcopy", "-O", "binary", "-j", ".data", elf, OUT / "data.bin"),
                                ("common/bin/objcopy", "-O", "binary", "-j", ".ram_text", elf, OUT / "ramtext.bin"),
                                ("common/bin/objdump", "-t", elf),
-                               ("common/bin/objdump", "-d", elf),
-                               ("common/bin/objdump", "-d", "-j", ".ram_text", elf))
+                               ("common/bin/objdump", "-d", *DIS_CPU, elf),
+                               ("common/bin/objdump", "-d", *DIS_CPU, "-j", ".ram_text", elf))
     (OUT / "dinghy.dis").write_text(dis)
 
     def symv(name):

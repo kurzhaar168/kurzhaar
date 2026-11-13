@@ -1,0 +1,26 @@
+# P3 Resonant squelch: a square through a resonant ladder, big envelope, accents and legato glide.
+osc1_wave = 1      # pulse
+osc1_pw = 0.5
+osc1_level = 1
+drive = 0.4
+cutoff = 220
+res = 0.7
+bass_comp = 0.6
+keytrack = 0.4
+fenv_amt = 5
+f_a = 0.001
+f_d = 0.35
+f_s = 0.0
+f_r = 0.15
+a_a = 0.001
+a_d = 0.4
+a_s = 1.0
+a_r = 0.06
+vel_sens = 0.6
+accent = 0.8
+glide = 0.08
+glide_mode = 1
+analog = 0.5
+sat = 0.3
+hpf = 20
+level = 0

@@ -15,5 +15,8 @@ int main(void)
     sum = bench_voice(&v, out, BENCH_N);
     memcpy(&u, &sum, 4);
     printf("checksum %.6f  bits %u (0x%08X)  out[255] %.6f\n", sum, u, u, out[BENCH_N - 1]);
+    sum = bench_engine_checksum(out);
+    memcpy(&u, &sum, 4);
+    printf("engine checksum %.6f  bits %u (0x%08X)\n", sum, u, u);
     return 0;
 }

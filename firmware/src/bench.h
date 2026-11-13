@@ -90,6 +90,41 @@ static void bench_voice_init(bvoice_t *v)
     v->env = 1.0f; v->env_dec = 0.9995f;
 }
 
+/* ---- the real bass engine: two patches, one note held; checksum of one block (host and device must agree) */
+#ifdef BENCH_STANDALONE
+#include "../engine/be.c"                        /* the Mac: one file */
+#else
+#include "../engine/be.h"                        /* the device: the engine is its own object (tools/build.py) */
+#ifdef BE_PROFILE
+extern volatile uint32_t be_prof_skip;
+#endif
+#endif
+static be_t b_eng;
+
+static void bench_engine_setup(int heavy)
+{
+    be_init(&b_eng, 44100.0f);
+    if (heavy) {                                 /* P2: two saws + a square sub, driven */
+        b_eng.p.osc2_level = 0.8f; b_eng.p.osc2_detune = 7.0f; b_eng.p.sub_level = 0.7f;
+        b_eng.p.drive = 0.6f; b_eng.p.cutoff = 450.0f; b_eng.p.res = 0.0f; b_eng.p.sat = 0.3f;
+    } else {                                     /* P1: one saw */
+        b_eng.p.cutoff = 180.0f; b_eng.p.res = 0.25f;
+    }
+    b_eng.p.analog = 0.5f;
+    be_patch_changed(&b_eng);
+    be_note_on(&b_eng, 33, 100);
+}
+
+static float bench_engine_checksum(float *out)   /* from setup: 8 blocks, the checksum of the 8th */
+{
+    uint32_t k, i;
+    float sum = 0.0f;
+    bench_engine_setup(1);
+    for (k = 0; k < 8u; k++) be_render(&b_eng, out, BENCH_N);
+    for (i = 0; i < BENCH_N; i++) sum += out[i] * (float)(i + 1u);
+    return sum;
+}
+
 #ifndef BENCH_STANDALONE
 /* ---- device side ---- */
 static volatile int32_t b_isink;
@@ -152,6 +187,10 @@ static void b_send(uint32_t idx, uint32_t val)
     midi_send(0xBFu, 100, (uint8_t)idx);
     for (k = 0; k < 5u; k++)
         midi_send(0xBFu, (uint8_t)(101u + k), (uint8_t)((val >> (7u * k)) & 0x7Fu));
+    {                                            /* let USB send them before the next value (the queue is short) */
+        uint32_t t0 = fm1_ms;
+        while (fm1_ms - t0 < 20u) platform_poll();
+    }
 }
 
 static void bench_run(void)
@@ -191,6 +230,62 @@ static void bench_run(void)
     (void)ns;
 
     b_send(0, t_int); b_send(1, t_q31); b_send(2, t_fmac); b_send(3, t_fdiv);
+    {                                            /* the real engine: one 256-frame block, P1 and P2 */
+        uint32_t t_p1, t_p2, k;
+        union { float f; uint32_t u; } ec;
+        bench_engine_setup(0);
+        for (k = 0; k < 8u; k++) be_render(&b_eng, b_out, BENCH_N);
+        t_p1 = B_TIME(be_render(&b_eng, b_out, BENCH_N));
+        bench_engine_setup(1);
+        for (k = 0; k < 8u; k++) be_render(&b_eng, b_out, BENCH_N);
+        t_p2 = B_TIME(be_render(&b_eng, b_out, BENCH_N));
+        ec.f = bench_engine_checksum(b_out);
+        b_line(7, "engine P1 ", t_p1 * 1000u / (24u * 5805u), " /1000");
+        b_line(8, "engine P2 ", t_p2 * 1000u / (24u * 5805u), " /1000");
+        b_send(7, t_p1); b_send(8, t_p2); b_send(9, ec.u);
+#ifdef BE_PROFILE
+        {                                        /* P2 with parts switched off: 10 no ladder, 11 no decimators,
+                                                    12 no oscillators, 13 none of the three (the per-sample rest) */
+            static const uint32_t SK[4] = {1u, 2u, 4u, 7u};
+            for (k = 0; k < 4u; k++) {
+                uint32_t t;
+                be_prof_skip = SK[k];
+                bench_engine_setup(1);
+                for (t = 0; t < 8u; t++) be_render(&b_eng, b_out, BENCH_N);
+                t = B_TIME(be_render(&b_eng, b_out, BENCH_N));
+                b_send(10u + k, t);
+            }
+            be_prof_skip = 0;
+        }
+        {                                        /* 14: a chain of dependent float multiply-adds, 15: of divides,
+                                                    16: a RAM load + add + store */
+            volatile float xv = 1.0f;
+            float x = xv;
+            uint32_t t0, j;
+            t0 = fm1_ticks();
+            for (j = 0; j < 4096u; j++) x = x * 1.0000001f + 1e-9f;
+            b_send(14, fm1_ticks() - t0);
+            t0 = fm1_ticks();
+            for (j = 0; j < 4096u; j++) x = 1.0f / (x + 1.0f);
+            b_send(15, fm1_ticks() - t0);
+            t0 = fm1_ticks();
+            for (j = 0; j < 4096u; j++) xv = xv + 1.0f;
+            b_send(16, fm1_ticks() - t0);
+            b_fsink = x;
+            {                                    /* 17: a chain of 8 dependent integer ops per iteration (the
+                                                    clock: integer ALU ops take one cycle) */
+                volatile uint32_t seed = 1u;
+                uint32_t a = seed, bb = 2u, c = 3u, d = 4u;
+                t0 = fm1_ticks();
+                for (j = 0; j < 4096u; j++) {
+                    a += j; bb ^= a; c += bb; d ^= c; a += d; bb += j; c ^= a; d += bb;
+                }
+                b_send(17, fm1_ticks() - t0);
+                b_isink = (int32_t)(a ^ bb ^ c ^ d);
+            }
+        }
+#endif
+    }
     b_send(4, t_voice); b_send(5, cs.u); b_send(6, 0x5A5A);   /* 6: end marker */
 }
 #endif /* !BENCH_STANDALONE */
