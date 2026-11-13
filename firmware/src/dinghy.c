@@ -42,9 +42,17 @@ static int32_t sine(uint32_t ph)                /* a full cycle over 2^32 -> -32
     return y > 32767 ? 32767 : y < -32767 ? -32767 : y;
 }
 
+#ifdef DINGHY_OUTTEST
+#include "outtest.h"                            /* M0 output test (24-bit, left only): PLAY runs it */
+#endif
+
 static void app_audio(int32_t *out, uint32_t n)
 {
     uint32_t v, i;
+#ifdef DINGHY_OUTTEST
+    outtest_audio(out, n);
+    return;
+#endif
     for (v = 0; v < NV; v++) {
         uint32_t ph = voice[v].ph, step = (uint32_t)(((uint64_t)voice[v].inc * bend_q16) >> 16);   /* (int64 multiply: fine) */
         int32_t amp = voice[v].amp, g = voice[v].gate;
@@ -105,6 +113,9 @@ static int quiet(void)                          /* nothing sounds, not even a re
 #define C_KEY RGB(210, 210, 210)
 #define C_OFF RGB(90, 90, 90)
 #define KEY0 53u                                /* key 0 = F3 */
+#ifdef DINGHY_BENCH
+#include "bench.h"                              /* M0 benchmark (tools/bench.sh): PLAY runs it */
+#endif
 static int black(uint32_t note) { return (0x54Au >> (note % 12u)) & 1u; }
 
 static void draw_note(void)
@@ -262,6 +273,26 @@ static void app_main(void)
         b = fm1_input_edges(&rel);              /* buttons pressed since the last call (bit = button id) */
         if (b & (1u << BTN_OCT_DOWN) && oct > -2) { set.oct = (uint8_t)(oct - 1); dirty = 1; t_change = fm1_ms; }
         if (b & (1u << BTN_OCT_UP) && oct < 2) { set.oct = (uint8_t)(oct + 1); dirty = 1; t_change = fm1_ms; }
+#ifdef DINGHY_BENCH
+        if (b & (1u << BTN_PLAY)) bench_run();  /* results stay on screen until a key redraws */
+#endif
+#ifdef DINGHY_OUTTEST
+        if (b & (1u << BTN_PLAY) && !ot_run) outtest_start();
+        {
+            static uint32_t ot_drawn = ~0u;
+            uint32_t sh = ot_run ? ot_seg + 1u : 0u;
+            if (sh != ot_drawn) {
+                char s[24] = "OUT TEST: PLAY", *p;
+                ot_drawn = sh;
+                if (sh) {
+                    p = s + 10; *p++ = 's'; *p++ = 't'; *p++ = 'e'; *p++ = 'p'; *p++ = ' ';
+                    if (sh >= 10u) *p++ = (char)('0' + sh / 10u);
+                    *p++ = (char)('0' + sh % 10u); *p++ = '/'; *p++ = '1'; *p++ = '8'; *p = 0;
+                }
+                draw_text_box(0, 100, 240, &FONT_L, s, sh ? C_ACC : C_WHITE, 1);
+            }
+        }
+#endif
         if ((e = fm1_enc_take(ENC_PRESETS)) != 0) {   /* detents turned since the last call */
             int32_t c = (int32_t)set.ch + e;
             set.ch = (uint8_t)(c < 0 ? 0 : c > 16 ? 16 : c);

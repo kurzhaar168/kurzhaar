@@ -376,6 +376,12 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
             o[i] = 0;
         UAC_ONLY(uac_render_start());
         app_audio(o, HALF_FRAMES);
+#ifdef DINGHY_OUTTEST
+        (void)b;                                /* M0 output test: the app wrote 24-bit DAC words; no MASTER, no tap */
+        fm1_audio_ack_half();
+        in_audio = 0;
+        return;
+#endif
         for (i = 0; i < HALF_WORDS; i++) {
             int32_t v = (o[i] * master_q12) >> 12;
             o[i] = v > 32767 ? 32767 : v < -32767 ? -32767 : v;
