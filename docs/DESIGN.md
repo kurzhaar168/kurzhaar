@@ -220,26 +220,43 @@ bar line.
 - **Copy/paste** a bar or pattern.
 - **Undo** last edit.
 
-**Not doing** (and why): polyphony, drums, effects other than drive (the DAW does those better), arpeggiator (it
-is a step sequencer), song mode (Studio One arranges), randomisers (v2 at most).
+**Not doing in v1** (and why): polyphony, drums, effects other than drive (the DAW does those better), arpeggiator
+(it is a step sequencer), song mode (Studio One arranges), randomisers.
 
-### 6.3 Panel map (draft — finalised on the device in M3)
+**v2 candidates**: a **delay** (cheap in CPU; memory-bound: ~340 KB of pool RAM is ~2 s of float or ~4 s of 16-bit
+audio) and a **reverb** (costs CPU: with the engine at ~50 % it needs a small design, possibly at a lower internal
+rate). Requested by the user 2026-11-13 as "later, not v1".
 
+### 6.3 Panel map (approved 2026-11-13 from the clickable mockup)
+
+The mockup: https://claude.ai/artifact/YJ4Uc3rRvbwpnHvGmyhoAD (the screens, the control map, the step tools).
 The 27 keys run F3–G5: **16 white keys, 11 black keys**.
 
 | Control | Function |
 | --- | --- |
-| PLAY | Start/stop (internal clock); with DAW clock, follows the DAW |
-| REC | Step-record: play notes and each is written to the next step (303 / Volca style); while playing: live record, quantised |
-| SEQ | Step view: white keys = steps (bright = playhead, glow = set). Tap a step to toggle; hold a step + play a note to set its pitch |
-| OCT− / OCT+ | Keyboard octave; in step view, bar 1–4 |
-| Scale-locked keys | White keys play scale degrees upward from the root; black keys are chromatic notes, active only in chromatic mode |
-| EDIT / ENV / LFO / FX | Knob pages: OSC & MIX · FILTER · ENVELOPES · LFO & GLIDE · DRIVE & OUTPUT |
-| GLO | Global: key, scale, tempo, swing, step rate, MIDI channel, clock source, timing offset |
-| SAVE | Save patch / pattern (hold) |
-| PRESETS encoder | Choose patch; with SEQ held, queue a pattern |
-| ARP / SEL (with a step held) | Accent / slide on that step (exact mapping decided on the device) |
-| Screen | The pattern as a pitch lane, key/scale, BPM + sync lock indicator, the current knob page |
+| SELECT | **Cutoff**, on every page |
+| ALGORITHM | **Resonance**, on every page |
+| PRESETS | Patch (sound) |
+| MASTER | Volume |
+| KNOB1–4 | The four parameters on the screen's bottom row |
+| HOME | **Performance page**: env amount, decay, accent, glide. Hold: undo (again: redo) |
+| EDIT | Oscillators: wave, pulse width, osc 2 level, detune · again: osc 2 semitones, sub, sub octave, noise |
+| ENV | Filter: cutoff, resonance, env amount, keytrack · again: filter envelope · again: amp envelope |
+| LFO | LFO: rate (tempo-synced), depth, destination, shape · again: glide, glide mode, accent, velocity |
+| FX | Drive, saturation, analog, level · again: bass compensation, 24/12 dB, low cut |
+| SEL | Key and scale: root, scale, in-scale/chromatic keys, transpose. Hold + a key: set the root |
+| GLO | Tempo, swing, step rate, timing offset · again: MIDI channel, clock source, notes out, cutoff CC. Hold + PLAY: tap tempo |
+| SEQ | White keys = steps; STEP page (note, octave, gate, accent/slide), PATTERN page (length, rotate, transpose, swing). Hold + white key: pattern 1–16 (switches at the bar end while playing). Hold + SAVE: copy pattern |
+| REC | Stopped: step record (play notes; each fills the next step). Playing: live record into the step playing |
+| PLAY | Start / stop; with a DAW's clock, follows its Start / Stop |
+| SAVE | Hold: store the patch and the pattern |
+| OCT− / OCT+ | Keyboard octave; in the sequencer, bar 1–4 |
+| White keys (playing) | Scale-locked: one scale degree per key from the root (lit keys = roots); chromatic: a normal keyboard |
+| Black keys | Scale-locked: off when playing; **when writing steps (REC, SEQ): ACC · SLIDE · TIE (the group of three), REST · BACK (the group of two)**. Chromatic: notes (accent/slide then on the STEP page's KNOB4) |
+| ARP | Spare (candidates: a fill/variation, a pattern "mutate") |
+| Screen | Header: pattern, key/scale, tempo (INT/EXT), transport. The pattern as a pitch lane (accents, slides, ties, playhead); on sound pages a picture of the page (waveform, filter curve, envelope, drive curve, scale). An info line (patch, step, or what a control just changed). The four knob boxes. |
+
+On the device a long press is not needed: holds are real holds.
 
 ## 7. Development workflow
 
