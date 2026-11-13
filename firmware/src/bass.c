@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* Lucca: das Bassmaschine. The bass machine (docs/DESIGN.md): an analog-style mono bass synth with a step sequencer, locked to a DAW's clock
  * or its own tempo, in a key and scale. Build: DINGHY_APP=bass DINGHY_DEFS="-mcpu=r3 -DBE_RAM_CODE" ./build.sh
  * The control map is docs/DESIGN.md 6.3 (approved from the clickable mockup).
@@ -14,6 +15,9 @@ static void app_idle(void);
 #define LCD_IDLE app_idle
 #define APP_NAME "LUCCA"                        /* Lucca: das Bassmaschine */
 #define STORE_MAGIC 0x53534142u                  /* "BASS": this firmware's own store (store.h) */
+#define APP_USB_MANUFACTURER "JazzMasterT"       /* USB: the maker's name (the MIDI port keeps the platform's name) */
+#define FM1_OUT_SHIFT 8                          /* the DAC's full range: +6 dB on Dinghy (our limiter holds the peaks
+                                                    below full scale; the output was measured clean to -1 dBFS) */
 #include "platform.c"
 #ifdef DINGHY_HOST
 #include "../engine/be.c"                        /* the Mac: one file */
@@ -33,6 +37,10 @@ static void app_idle(void);
 #include <stddef.h>
 
 #define FS_AUDIO 44117.647f                      /* the I2S clock, not 44,100 */
+#define LUCCA_VERSION APP_VER                    /* this firmware's version (the ABOUT page): build.sh --release X.Y */
+#define LUCCA_AUTHOR "JazzMasterT"
+static const uint8_t RATE_TPS[6] = {24u, 12u, 8u, 6u, 4u, 3u};   /* MIDI clock ticks a step */
+static const char *const RATE_NAME[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
 
 /* ======================================================================= shared state */
 static seq_pat_t pats[SEQ_NPAT];
@@ -46,14 +54,14 @@ static uint32_t patch_no;
 static struct {
     uint16_t bpm10;                              /* internal tempo, 0.1 BPM */
     uint8_t swing;                               /* 50..75 % */
-    uint8_t rate;                                /* 0 1/8, 1 1/16, 2 1/16T, 3 1/32 (only 1/16 plays yet) */
+    uint8_t rate;                                /* the step: 0 1/4, 1 1/8, 2 1/8T, 3 1/16, 4 1/16T, 5 1/32 */
     uint8_t clock;                               /* 0 auto, 1 internal only, 2 external only */
     uint8_t midi_ch;                             /* 0 omni (out: 1), 1..16 */
     uint8_t notes_out;                           /* the sequencer's notes over USB */
-    uint8_t cut_cc;                              /* (not yet) */
+    uint8_t cc;                                  /* cutoff CC 74, resonance CC 71: 0 off, 1 in, 2 out, 3 in + out */
     int8_t offset10;                             /* timing offset, 0.1 ms: + plays early */
     int8_t oct;                                  /* the keyboard's octave */
-} glo = {1200u, 54u, 1u, 0u, 0u, 1u, 0u, 0, 0};
+} glo = {1200u, 54u, 3u, 0u, 0u, 1u, 1u, 0, 0};
 
 /* ======================================================================= audio interrupt */
 static be_t eng;
@@ -129,7 +137,7 @@ static void a_play_step(uint32_t at)             /* a step starts at sample `at`
     seq_step_t st;
     float len = clk_step_len(&clk);
     uint32_t idx, note, vel, k;
-    if (next_pat != 0xFFu && (clk.step & 15) == 0) {   /* a queued pattern: at the bar line */
+    if (next_pat != 0xFFu && clk.step % (int32_t)(96u / clk.tps) == 0) {   /* a queued pattern: at the bar line */
         cur_pat = next_pat;
         next_pat = 0xFFu;
         ppos = 0;
@@ -219,6 +227,16 @@ static void app_audio(int32_t *out, uint32_t n)
         }
     }
     clk_ext_poll(&clk, aS);
+    if (clk.tps != RATE_TPS[glo.rate % 6u]) clk_set_rate(&clk, RATE_TPS[glo.rate % 6u]);
+    {                                            /* the tempo, and where we are in the song (the synced LFOs lock to it) */
+        float pos = -1.0f;
+        if (clk.running) {
+            float len = clk_step_len(&clk), steps = (float)clk.step - clk_step_offset(&clk, clk.step, aS) / (len > 1.0f ? len : 1.0f);
+            pos = steps * (float)clk.tps * (1.0f / 24.0f);
+            if (pos < 0.0f) pos = 0.0f;
+        }
+        be_set_tempo(&eng, clk_tempo(&clk), pos);
+    }
     a_nev = 0;
     player_block(&clk, &pcfg, aS, n, a_emit, 0);
     a_running = clk.running;
@@ -242,7 +260,11 @@ static void app_audio(int32_t *out, uint32_t n)
             off_n[which] = 0;
         }
     }
-    if (eng.p.verb_mix > 0.001f) {               /* the reverb: stereo around the dry bass */
+    {                                            /* an LFO on the reverb's mix */
+        float vm = eng.p.verb_mix + eng.mod_verb;
+        verb.cfg.mix = vm < 0.0f ? 0.0f : vm > 1.0f ? 1.0f : vm;
+    }
+    if (verb.cfg.mix > 0.001f) {                 /* the reverb: stereo around the dry bass */
         for (i = 0; i < n; i++) sbuf[2u * i] = sbuf[2u * i + 1u] = rbuf[i];
         verb_process(&verb, rbuf, sbuf, n);
         for (i = 0; i < 2u * n; i++) {
@@ -265,18 +287,20 @@ static void app_audio(int32_t *out, uint32_t n)
 /* ======================================================================= parameters */
 enum { T_LIN, T_LOG, T_ENUM, T_APP };
 enum { F_PCT, F_OCT, F_HZ, F_TIME, F_CENT, F_SEMI, F_DB, F_WAVE, F_SUBOCT, F_GMODE, F_POLES, F_LFODEST, F_LFOSHAPE,
-       F_LFORATE, F_INT };
+       F_SYNC, F_RETRIG, F_BIPCT, F_INT };
 typedef struct { const char *label; uint8_t type, fmt; float min, max, step; uint16_t off; } prm_t;
 #define PF(lbl, fld, ty, fm, mn, mx, st) {lbl, ty, fm, mn, mx, st, (uint16_t)offsetof(be_patch_t, fld)}
-enum { A_ROOT, A_SCALE, A_KEYS, A_TRANSP, A_TEMPO, A_SWING, A_RATE, A_OFFSET, A_MIDICH, A_CLOCK, A_NOTESOUT, A_CUTCC,
+enum { A_ROOT, A_SCALE, A_KEYS, A_TRANSP, A_TEMPO, A_SWING, A_RATE, A_OFFSET, A_MIDICH, A_CLOCK, A_NOTESOUT, A_CC,
+       A_L1RATE, A_L2RATE,
        A_ST_NOTE, A_ST_OCT, A_ST_GATE, A_ST_ACCSLD, A_PT_LEN, A_PT_ROT, A_LOWCUT };
 #define PA(lbl, id) {lbl, T_APP, 0, 0.0f, 0.0f, 0.0f, (uint16_t)(id)}
 enum {                                           /* the parameters, by name (indices into PRM) */
     P_ENVAMT, P_FDEC, P_ACCENT, P_GLIDE, P_WAVE, P_PW, P_OSC2, P_DETUNE, P_SEMI, P_SUB, P_SUBOCT, P_NOISE,
-    P_CUTOFF, P_RES, P_KEYTRK, P_FA, P_FS, P_FR, P_AA, P_AD, P_AS, P_AR, P_LRATE, P_LDEPTH, P_LDEST, P_LSHAPE,
+    P_CUTOFF, P_RES, P_KEYTRK, P_FA, P_FS, P_FR, P_AA, P_AD, P_AS, P_AR,
+    P_L1RATE, P_L1SHAPE, P_L1DEST, P_L1DEPTH, P_L1SYNC, P_L1RETRIG, P_L2RATE, P_L2SHAPE, P_L2DEST, P_L2DEPTH, P_L2SYNC, P_L2RETRIG,
     P_GMODE, P_VELO, P_DRIVE, P_SAT, P_ANALOG, P_LEVEL, P_BCOMP, P_POLES, P_LOWCUT,
     P_VMIX, P_VDECAY, P_VTONE, P_VLOWCUT,
-    P_ROOT, P_SCALE, P_KEYS, P_TRANSP, P_TEMPO, P_SWING, P_RATE, P_OFFSET, P_MIDICH, P_CLOCK, P_NOTESOUT, P_CUTCC,
+    P_ROOT, P_SCALE, P_KEYS, P_TRANSP, P_TEMPO, P_SWING, P_RATE, P_OFFSET, P_MIDICH, P_CLOCK, P_NOTESOUT, P_CC,
     P_ST_NOTE, P_ST_OCT, P_ST_GATE, P_ST_ACCSLD, P_PT_LEN, P_PT_ROT, P_NONE
 };
 static const prm_t PRM[] = {
@@ -291,8 +315,12 @@ static const prm_t PRM[] = {
     PF("SUSTAIN", f_s, T_LIN, F_PCT, 0.0f, 1.0f, 0.02f), PF("RELEASE", f_r, T_LOG, F_TIME, 0.002f, 4.0f, 0.125f),
     PF("ATTACK", a_a, T_LOG, F_TIME, 0.0005f, 4.0f, 0.125f), PF("DECAY", a_d, T_LOG, F_TIME, 0.005f, 4.0f, 0.125f),
     PF("SUSTAIN", a_s, T_LIN, F_PCT, 0.0f, 1.0f, 0.02f), PF("RELEASE", a_r, T_LOG, F_TIME, 0.002f, 4.0f, 0.125f),
-    PF("RATE", lfo_rate, T_ENUM, F_LFORATE, 0.0f, 6.0f, 1.0f), PF("DEPTH", lfo_depth, T_LIN, F_PCT, 0.0f, 1.0f, 0.02f),
-    PF("TO", lfo_dest, T_ENUM, F_LFODEST, 0.0f, 2.0f, 1.0f), PF("SHAPE", lfo_shape, T_ENUM, F_LFOSHAPE, 0.0f, 2.0f, 1.0f),
+    PA("RATE", A_L1RATE), PF("SHAPE", lfo1_shape, T_ENUM, F_LFOSHAPE, 0.0f, 5.0f, 1.0f),
+    PF("TO", lfo1_dest, T_ENUM, F_LFODEST, 0.0f, 7.0f, 1.0f), PF("DEPTH", lfo1_depth, T_LIN, F_BIPCT, -1.0f, 1.0f, 0.02f),
+    PF("1 SYNC", lfo1_sync, T_ENUM, F_SYNC, 0.0f, 1.0f, 1.0f), PF("1 TRIG", lfo1_retrig, T_ENUM, F_RETRIG, 0.0f, 1.0f, 1.0f),
+    PA("RATE", A_L2RATE), PF("SHAPE", lfo2_shape, T_ENUM, F_LFOSHAPE, 0.0f, 5.0f, 1.0f),
+    PF("TO", lfo2_dest, T_ENUM, F_LFODEST, 0.0f, 7.0f, 1.0f), PF("DEPTH", lfo2_depth, T_LIN, F_BIPCT, -1.0f, 1.0f, 0.02f),
+    PF("2 SYNC", lfo2_sync, T_ENUM, F_SYNC, 0.0f, 1.0f, 1.0f), PF("2 TRIG", lfo2_retrig, T_ENUM, F_RETRIG, 0.0f, 1.0f, 1.0f),
     PF("G.MODE", glide_mode, T_ENUM, F_GMODE, 0.0f, 2.0f, 1.0f), PF("VELO", vel_sens, T_LIN, F_PCT, 0.0f, 1.0f, 0.02f),
     PF("DRIVE", drive, T_LIN, F_PCT, 0.0f, 1.0f, 0.02f), PF("SAT", sat, T_LIN, F_PCT, 0.0f, 1.0f, 0.02f),
     PF("ANALOG", analog, T_LIN, F_PCT, 0.0f, 1.0f, 0.02f), PF("LEVEL", level, T_LIN, F_DB, -24.0f, 6.0f, 0.5f),
@@ -302,27 +330,31 @@ static const prm_t PRM[] = {
     PF("TONE", verb_tone, T_LIN, F_PCT, 0.0f, 1.0f, 0.02f), PF("LOWCUT", verb_lowcut, T_LOG, F_HZ, 60.0f, 600.0f, 0.0833f),
     PA("ROOT", A_ROOT), PA("SCALE", A_SCALE), PA("KEYS", A_KEYS), PA("TRANSP", A_TRANSP), PA("TEMPO", A_TEMPO),
     PA("SWING", A_SWING), PA("STEP", A_RATE), PA("OFFSET", A_OFFSET), PA("MIDI CH", A_MIDICH), PA("CLOCK", A_CLOCK),
-    PA("NOTES", A_NOTESOUT), PA("CUT CC", A_CUTCC), PA("NOTE", A_ST_NOTE), PA("OCTAVE", A_ST_OCT),
+    PA("NOTES", A_NOTESOUT), PA("CC", A_CC), PA("NOTE", A_ST_NOTE), PA("OCTAVE", A_ST_OCT),
     PA("GATE", A_ST_GATE), PA("ACC/SLD", A_ST_ACCSLD), PA("LENGTH", A_PT_LEN), PA("ROTATE", A_PT_ROT),
 };
 
 enum { PG_HOME, PG_EDIT, PG_ENV, PG_LFO, PG_FX, PG_SEL, PG_GLO, PG_SEQ, PG_N };
-enum { G_NONE, G_OSC, G_MIX, G_FILTER, G_FENV, G_AENV, G_LFO, G_GLIDE, G_DRIVE, G_VERB, G_SCALE, G_SWING, G_MIDI };
+enum { G_NONE, G_OSC, G_MIX, G_FILTER, G_FENV, G_AENV, G_LFO1, G_LFO2, G_LFOSET, G_GLIDE, G_DRIVE, G_VERB, G_SCALE,
+       G_SWING, G_MIDI, G_ABOUT };
 typedef struct { const char *name; uint8_t gfx; uint8_t p[4]; } page_t;
 static const page_t PAGES0[] = {
     {"PERFORM", G_NONE, {P_ENVAMT, P_FDEC, P_ACCENT, P_GLIDE}},
     {"OSC", G_OSC, {P_WAVE, P_PW, P_OSC2, P_DETUNE}}, {"MIX", G_MIX, {P_SEMI, P_SUB, P_SUBOCT, P_NOISE}},
     {"FILTER", G_FILTER, {P_CUTOFF, P_RES, P_ENVAMT, P_KEYTRK}}, {"FILT ENV", G_FENV, {P_FA, P_FDEC, P_FS, P_FR}},
     {"AMP ENV", G_AENV, {P_AA, P_AD, P_AS, P_AR}},
-    {"LFO", G_LFO, {P_LRATE, P_LDEPTH, P_LDEST, P_LSHAPE}}, {"MOTION", G_GLIDE, {P_GLIDE, P_GMODE, P_ACCENT, P_VELO}},
+    {"LFO 1", G_LFO1, {P_L1RATE, P_L1SHAPE, P_L1DEST, P_L1DEPTH}}, {"LFO 2", G_LFO2, {P_L2RATE, P_L2SHAPE, P_L2DEST, P_L2DEPTH}},
+    {"LFO SET", G_LFOSET, {P_L1SYNC, P_L1RETRIG, P_L2SYNC, P_L2RETRIG}},
+    {"MOTION", G_GLIDE, {P_GLIDE, P_GMODE, P_ACCENT, P_VELO}},
     {"DRIVE", G_DRIVE, {P_DRIVE, P_SAT, P_ANALOG, P_LEVEL}}, {"TONE", G_FILTER, {P_BCOMP, P_POLES, P_LOWCUT, P_NONE}},
     {"REVERB", G_VERB, {P_VMIX, P_VDECAY, P_VTONE, P_VLOWCUT}},
     {"SCALE", G_SCALE, {P_ROOT, P_SCALE, P_KEYS, P_TRANSP}},
-    {"CLOCK", G_SWING, {P_TEMPO, P_SWING, P_RATE, P_OFFSET}}, {"MIDI", G_MIDI, {P_MIDICH, P_CLOCK, P_NOTESOUT, P_CUTCC}},
+    {"CLOCK", G_SWING, {P_TEMPO, P_SWING, P_RATE, P_OFFSET}}, {"MIDI", G_MIDI, {P_MIDICH, P_CLOCK, P_NOTESOUT, P_CC}},
+    {"ABOUT", G_ABOUT, {P_NONE, P_NONE, P_NONE, P_NONE}},
     {"STEP", G_NONE, {P_ST_NOTE, P_ST_OCT, P_ST_GATE, P_ST_ACCSLD}}, {"PATTERN", G_NONE, {P_PT_LEN, P_PT_ROT, P_TRANSP, P_SWING}},
 };
-static const uint8_t PG_FIRST[PG_N] = {0, 1, 3, 6, 8, 11, 12, 14};   /* each page button's first page in PAGES0 */
-static const uint8_t PG_COUNT[PG_N] = {1, 2, 3, 2, 3, 1, 2, 2};
+static const uint8_t PG_FIRST[PG_N] = {0, 1, 3, 6, 10, 13, 14, 17};  /* each page button's first page in PAGES0 */
+static const uint8_t PG_COUNT[PG_N] = {1, 2, 3, 4, 3, 1, 3, 2};
 
 /* ======================================================================= the interface's state */
 static struct {
@@ -410,10 +442,13 @@ static void prm_text(uint32_t id, char *b)
         case F_SUBOCT: s_cat(p, v < 1.5f ? "-1 OCT" : "-2 OCT"); break;
         case F_GMODE: s_cat(p, v < 0.5f ? "OFF" : v < 1.5f ? "LEGATO" : "ALWAYS"); break;
         case F_POLES: s_cat(p, v < 0.5f ? "24 dB" : "12 dB"); break;
-        case F_LFODEST: s_cat(p, v < 0.5f ? "PITCH" : v < 1.5f ? "CUTOFF" : "PW"); break;
-        case F_LFOSHAPE: s_cat(p, v < 0.5f ? "TRI" : v < 1.5f ? "SQUARE" : "S&H"); break;
-        case F_LFORATE: { static const char *const R[7] = {"1/32", "1/16", "1/8", "1/4", "1/2", "1 BAR", "2 BARS"};
-                          s_cat(p, R[(int32_t)(v + 0.5f) % 7]); } break;
+        case F_LFODEST: { static const char *const D[8] = {"OFF", "PITCH", "CUTOFF", "RESO", "PW", "AMP", "DRIVE", "REVERB"};
+                          s_cat(p, D[(int32_t)(v + 0.5f) & 7]); } break;
+        case F_LFOSHAPE: { static const char *const S[6] = {"SINE", "TRI", "SAW DN", "SAW UP", "SQUARE", "S&H"};
+                           s_cat(p, S[(int32_t)(v + 0.5f) % 6]); } break;
+        case F_SYNC: s_cat(p, v < 0.5f ? "FREE" : "TEMPO"); break;
+        case F_RETRIG: s_cat(p, v < 0.5f ? "FREE" : "NOTE"); break;
+        case F_BIPCT: if (v > 0.005f) *p++ = '+'; p = s_int(p, (int32_t)(v * 100.0f + (v < 0 ? -0.5f : 0.5f))); s_cat(p, "%"); break;
         default: s_int(p, (int32_t)v); break;
         }
         return;
@@ -425,13 +460,20 @@ static void prm_text(uint32_t id, char *b)
     case A_TRANSP: if (key.transpose > 0) *p++ = '+'; s_int(p, key.transpose); break;
     case A_TEMPO: s_fix1(p, (float)glo.bpm10 * 0.1f); break;
     case A_SWING: p = s_int(p, glo.swing); s_cat(p, "%"); break;
-    case A_RATE: { static const char *const R[4] = {"1/8", "1/16", "1/16T", "1/32"}; s_cat(p, R[glo.rate & 3u]); } break;
+    case A_RATE: s_cat(p, RATE_NAME[glo.rate % 6u]); break;
+    case A_L1RATE: case A_L2RATE: {
+        float r = q->off == A_L1RATE ? ui_patch.lfo1_rate : ui_patch.lfo2_rate;
+        float sy = q->off == A_L1RATE ? ui_patch.lfo1_sync : ui_patch.lfo2_sync;
+        if (sy > 0.5f) s_cat(p, BE_LFO_DIV_NAME[(uint32_t)be_clamp(r, 0.0f, (float)(BE_LFO_NDIV - 1u))]);
+        else if (r < 10.0f) { p = s_fix1(p, r); s_cat(p, "Hz"); }
+        else { p = s_int(p, (int32_t)(r + 0.5f)); s_cat(p, "Hz"); }
+    } break;
     case A_OFFSET: if (glo.offset10 > 0) *p++ = '-'; else if (glo.offset10 < 0) *p++ = '+';
                    p = s_fix1(p, (float)(glo.offset10 < 0 ? -glo.offset10 : glo.offset10) * 0.1f); s_cat(p, "ms"); break;
     case A_MIDICH: if (glo.midi_ch) { p = s_cat(p, "CH "); s_int(p, glo.midi_ch); } else s_cat(p, "OMNI"); break;
     case A_CLOCK: s_cat(p, glo.clock == 0u ? "AUTO" : glo.clock == 1u ? "INT" : "EXT"); break;
     case A_NOTESOUT: s_cat(p, glo.notes_out ? "ON" : "OFF"); break;
-    case A_CUTCC: s_cat(p, glo.cut_cc ? "CC 74" : "OFF"); break;
+    case A_CC: { static const char *const C[4] = {"OFF", "IN", "OUT", "IN+OUT"}; s_cat(p, C[glo.cc & 3u]); } break;
     case A_LOWCUT: s_cat(p, ui_patch.hpf < 1.0f ? "OFF" : ui_patch.hpf < 25.0f ? "20Hz" : "30Hz"); break;
     case A_ST_NOTE: { seq_step_t *s = sel_step();
         if (!s || !(s->flags & SEQ_ON)) s_cat(p, "--"); else if (s->flags & SEQ_TIE) s_cat(p, "TIE"); else s_note(p, seq_note(&key, s)); } break;
@@ -480,7 +522,12 @@ static void prm_turn(uint32_t id, int32_t d)
             x = (x < q->min ? q->min : x) * be_exp2(q->step * (float)d);
         } else x += q->step * (float)d;
         if (q->type == T_ENUM) x = (float)(int32_t)(x + (x < 0 ? -0.5f : 0.5f));
-        *v = x < q->min ? q->min : x > q->max ? q->max : x;
+        x = x < q->min ? q->min : x > q->max ? q->max : x;
+        if ((id == P_L1SYNC || id == P_L2SYNC) && x != *v) {   /* the rate means something else now */
+            float *r = id == P_L1SYNC ? &ui_patch.lfo1_rate : &ui_patch.lfo2_rate;
+            *r = x > 0.5f ? 8.0f : 2.0f;         /* 1/8, or 2 Hz */
+        }
+        *v = x;
         patch_touched();
         return;
     }
@@ -491,13 +538,19 @@ static void prm_turn(uint32_t id, int32_t d)
     case A_TRANSP: { int32_t t = key.transpose + d; key.transpose = (int8_t)(t < -7 ? -7 : t > 7 ? 7 : t); dirty |= D_MID; } break;
     case A_TEMPO: { int32_t b = (int32_t)glo.bpm10 + 5 * d; glo.bpm10 = (uint16_t)(b < 400 ? 400 : b > 2400 ? 2400 : b); dirty |= D_HDR; } break;
     case A_SWING: { int32_t s = (int32_t)glo.swing + d; glo.swing = (uint8_t)(s < 50 ? 50 : s > 75 ? 75 : s); dirty |= D_MID; } break;
-    case A_RATE: { int32_t r = (int32_t)glo.rate + d; glo.rate = (uint8_t)(r < 0 ? 0 : r > 3 ? 3 : r);
-                   if (glo.rate != 1u) toast("ONLY 1/16 PLAYS YET"); } break;
+    case A_RATE: { int32_t r = (int32_t)glo.rate + d; glo.rate = (uint8_t)(r < 0 ? 0 : r > 5 ? 5 : r); } break;
+    case A_L1RATE: case A_L2RATE: {              /* synced: the next division; free: Hz, a log scale */
+        float *r = q->off == A_L1RATE ? &ui_patch.lfo1_rate : &ui_patch.lfo2_rate;
+        float sy = q->off == A_L1RATE ? ui_patch.lfo1_sync : ui_patch.lfo2_sync;
+        if (sy > 0.5f) *r = be_clamp((float)(int32_t)(*r + 0.5f) + (float)d, 0.0f, (float)(BE_LFO_NDIV - 1u));
+        else *r = be_clamp(*r * be_exp2(0.125f * (float)d), 0.05f, 30.0f);
+        patch_touched();
+    } break;
     case A_OFFSET: { int32_t o = glo.offset10 + d * 5; glo.offset10 = (int8_t)(o < -100 ? -100 : o > 100 ? 100 : o); } break;
     case A_MIDICH: { int32_t c = (int32_t)glo.midi_ch + d; glo.midi_ch = (uint8_t)(c < 0 ? 0 : c > 16 ? 16 : c); } break;
     case A_CLOCK: { int32_t c = (int32_t)glo.clock + d; glo.clock = (uint8_t)(c < 0 ? 0 : c > 2 ? 2 : c); dirty |= D_HDR; } break;
     case A_NOTESOUT: glo.notes_out = d > 0; break;
-    case A_CUTCC: glo.cut_cc = d > 0; if (glo.cut_cc) toast("CUTOFF CC: NOT YET"); break;
+    case A_CC: { int32_t c = (int32_t)glo.cc + d; glo.cc = (uint8_t)(c < 0 ? 0 : c > 3 ? 3 : c); } break;
     case A_LOWCUT: { float h = ui_patch.hpf; h = d > 0 ? (h < 1.0f ? 20.0f : 30.0f) : (h > 25.0f ? 20.0f : 0.0f); ui_patch.hpf = h; patch_touched(); } break;
     case A_ST_NOTE: case A_ST_OCT: case A_ST_GATE: case A_ST_ACCSLD: {
         seq_step_t *s = sel_step(), t;
@@ -519,7 +572,7 @@ static void prm_turn(uint32_t id, int32_t d)
 }
 
 /* ======================================================================= storage */
-#define BASS_MAGIC 0x31534142u                   /* "BAS1": the layout of the two slots below */
+#define BASS_MAGIC 0x32534142u                   /* "BAS2": the layout of the two slots below (BAS1: before the LFOs) */
 typedef struct {
     uint32_t magic;
     seq_key_t key;
@@ -744,15 +797,33 @@ static void graphic(int32_t y0, int32_t h)       /* the page's picture */
             else v = s * be_exp(-4.6f * (t - a - d - 0.35f) / r);
             PLOT(10 + x, y0 + h - 6 - (int32_t)(v * (float)(h - 14)));
         }
-    } else if (pg->gfx == G_LFO) {               /* LFO */
-        for (x = 0; x <= 220; x++) {
-            float ph = (float)x / 73.0f, v; ph -= (float)(int32_t)ph;
-            v = ui_patch.lfo_shape < 0.5f ? 1.0f - 4.0f * (ph < 0.5f ? 0.5f - ph : ph - 0.5f) : ui_patch.lfo_shape < 1.5f ? (ph < 0.5f ? 1.0f : -1.0f)
-              : ((x / 55) & 1 ? 0.6f : -0.4f);
-            v *= ui_patch.lfo_depth > 0.08f ? ui_patch.lfo_depth : 0.08f;
-            PLOT(10 + x, y0 + h / 2 - (int32_t)(v * (float)h * 0.38f));
+    } else if (pg->gfx == G_LFO1 || pg->gfx == G_LFO2 || pg->gfx == G_LFOSET) {   /* the LFOs' waves */
+        uint32_t l, l0 = pg->gfx == G_LFO2 ? 1u : 0u, l1 = pg->gfx == G_LFO1 ? 0u : 1u;
+        for (l = l0; l <= l1; l++) {
+            const float *lf = l ? &ui_patch.lfo2_rate : &ui_patch.lfo1_rate;   /* rate shape dest depth sync retrig */
+            int32_t sh = (int32_t)(lf[1] + 0.5f), cy = pg->gfx == G_LFOSET ? y0 + 26 + (int32_t)l * 54 : y0 + h / 2;
+            float dep = lf[3] < 0.0f ? -lf[3] : lf[3], amp = (pg->gfx == G_LFOSET ? 20.0f : 38.0f) * (dep > 0.1f ? dep : 0.1f);
+            char b[32], *p;
+            px = -1;
+            for (x = 0; x <= 220; x++) {
+                float ph = (float)x / 73.0f, v;
+                ph -= (float)(int32_t)ph;
+                switch (sh) {
+                case BE_LFO_TRI: v = ph < 0.5f ? 4.0f * ph - 1.0f : 3.0f - 4.0f * ph; break;
+                case BE_LFO_SAWDN: v = 1.0f - 2.0f * ph; break;
+                case BE_LFO_SAWUP: v = 2.0f * ph - 1.0f; break;
+                case BE_LFO_SQUARE: v = ph < 0.5f ? 1.0f : -1.0f; break;
+                case BE_LFO_SH: { static const float SH[4] = {0.6f, -0.3f, 0.9f, -0.8f}; v = SH[(x / 37) & 3]; } break;
+                default: v = be_sin2pi(ph); break;
+                }
+                if (lf[3] < 0.0f) v = -v;
+                PLOT(10 + x, cy - (int32_t)(v * amp));
+            }
+            p = s_cat(b, l ? "2: " : "1: ");
+            prm_text(l ? P_L2RATE : P_L1RATE, p); while (*p) p++;
+            p = s_cat(p, " > "); prm_text(l ? P_L2DEST : P_L1DEST, p);
+            cv_text(10, pg->gfx == G_LFOSET ? cy - 26 : y0 + 2, &FONT_S, b, (int32_t)(lf[2] + 0.5f) == BE_TO_OFF ? K_DIM : K_MUTE);
         }
-        cv_text(120 - text_w(&FONT_S, "LFO: NOT YET") / 2, y0 + 4, &FONT_S, "LFO: NOT YET", K_DIM);
     } else if (pg->gfx == G_GLIDE) {               /* MOTION: a glide between two notes */
         float gl = ui_patch.glide > 0.002f ? ui_patch.glide : 0.002f;
         for (x = 0; x <= 220; x++) {
@@ -790,6 +861,17 @@ static void graphic(int32_t y0, int32_t h)       /* the page's picture */
         cv_rect(10, y0 + h - 22, 220, 1, K_GRID);
         { char b[32], *p = s_cat(b, "BASS DRY BELOW "); prm_text(P_VLOWCUT, p); cv_text(120 - text_w(&FONT_S, b) / 2, y0 + h - 18, &FONT_S, b, K_MUTE); }
         (void)lc;
+    } else if (pg->gfx == G_ABOUT) {             /* who, which version */
+        char b[48], *p;
+        cv_text(120 - text_w(&FONT_L, "LUCCA") / 2, y0 - 2, &FONT_L, "LUCCA", K_AMBER);
+        cv_text(120 - text_w(&FONT_S, "das Bassmaschine") / 2, y0 + 30, &FONT_S, "das Bassmaschine", K_TEXT);
+        cv_text(120 - text_w(&FONT_S, "by " LUCCA_AUTHOR) / 2, y0 + 48, &FONT_S, "by " LUCCA_AUTHOR, K_CYAN);
+        p = s_cat(b, LUCCA_VERSION[0] >= '0' && LUCCA_VERSION[0] <= '9' ? "v" : "");   /* v1.0, or "dev" */
+        p = s_cat(p, LUCCA_VERSION "  "); s_cat(p, __DATE__);
+        cv_text(120 - text_w(&FONT_S, b) / 2, y0 + 64, &FONT_S, b, K_MUTE);
+        cv_text(120 - text_w(&FONT_S, "(C) 2026 " LUCCA_AUTHOR) / 2, y0 + 80, &FONT_S, "(C) 2026 " LUCCA_AUTHOR, K_MUTE);
+        cv_text(120 - text_w(&FONT_S, "GPL-3.0: Dinghy, Felucca") / 2, y0 + 96, &FONT_S, "GPL-3.0: Dinghy, Felucca", K_DIM);
+        (void)px; (void)py;
     } else if (pg->gfx == G_MIDI) {              /* MIDI, and the audio interrupt's load */
         char b[40], *p;
         p = s_cat(b, "AUDIO CPU "); p = s_int(p, (int32_t)cpu_avg10 / 10); p = s_cat(p, "% MAX "); p = s_int(p, (int32_t)cpu_max10 / 10); s_cat(p, "%");
@@ -797,6 +879,7 @@ static void graphic(int32_t y0, int32_t h)       /* the page's picture */
         cv_text(10, y0 + 30, &FONT_S, "IN: USB + TRS", K_TEXT);
         cv_text(10, y0 + 50, &FONT_S, glo.clock == 0u ? "CLOCK: WHATEVER COMES" : glo.clock == 1u ? "CLOCK: OWN TEMPO" : "CLOCK: DAW ONLY", K_TEXT);
         cv_text(10, y0 + 70, &FONT_S, glo.notes_out ? "NOTES OUT: USB" : "NOTES OUT: OFF", K_TEXT);
+        cv_text(10, y0 + 90, &FONT_S, "CC: CUTOFF 74 RESO 71", glo.cc ? K_TEXT : K_DIM);
     }
 #undef PLOT
 }
@@ -1009,7 +1092,8 @@ static void key_up(uint32_t k)
 #define HOLD_MS 550u
 static uint32_t btn_t[14];
 static uint8_t btn_combo[14], btn_long[14];
-static int deferred(uint32_t b) { return b == BTN_SEQ || b == BTN_SEL || b == BTN_GLO || b == BTN_HOME || b == BTN_SAVE; }
+static int deferred(uint32_t b) { return b == BTN_SEQ || b == BTN_SEL || b == BTN_GLO || b == BTN_HOME || b == BTN_SAVE || b == BTN_ARP; }
+static uint32_t idea_rng;                        /* ARP's ideas: their randomness */
 
 static void tap(uint32_t b)
 {
@@ -1051,7 +1135,13 @@ static void tap(uint32_t b)
         dirty |= D_HDR | D_MID | D_INFO;
         break;
     case BTN_SAVE: toast("HOLD SAVE TO STORE"); break;
-    case BTN_ARP: toast("ARP: SPARE"); break;
+    case BTN_ARP:                                /* MUTATE: vary 2..3 steps, in key (hold HOME: undo) */
+        if (!idea_rng) idea_rng = fm1_ticks() | 1u;
+        snapshot();
+        seq_mutate(&key, pat(), &idea_rng);
+        toast("MUTATED (HOME: UNDO)");
+        dirty |= D_MID | D_KNOB;
+        break;
     default: break;
     }
 }
@@ -1065,6 +1155,13 @@ static void long_press(uint32_t b)
         toast(a_running ? "SAVING..." : "SAVING...");
         draw_info();
         toast(store_save() ? "SAVE FAILED" : "SAVED");
+    } else if (b == BTN_ARP) {                   /* NEW BASSLINE: 16 steps in the key (hold HOME: undo) */
+        if (!idea_rng) idea_rng = fm1_ticks() | 1u;
+        snapshot();
+        seq_generate(&key, pat(), &idea_rng);
+        ui.sel = -1;
+        toast("NEW BASSLINE (HOME: UNDO)");
+        dirty |= D_MID | D_KNOB | D_INFO;
     } else if (b == BTN_SEQ) toast("SEQ: A WHITE KEY = PATTERN");
     else if (b == BTN_SEL) toast("SEL: A KEY = ROOT");
     else if (b == BTN_GLO) toast("GLO: PLAY = TAP TEMPO");
@@ -1084,6 +1181,15 @@ static void tap_tempo(void)
     }
     (void)i;
     toast("TAP TEMPO");
+}
+
+static void select_patch(uint32_t n)             /* PRESETS, or a MIDI program change */
+{
+    patches[patch_no] = ui_patch;                /* (the edits stay with the patch in RAM; SAVE stores them) */
+    patch_no = n % NPATCH;
+    ui_patch = patches[patch_no];
+    patch_touched();
+    dirty |= D_INFO;
 }
 
 /* speed-sensitive turning (SELECT, ALGORITHM): a slow turn moves in fine steps, a quick one sweeps. The speed is
@@ -1142,11 +1248,7 @@ static void panel(void)
     if ((e = fm1_enc_take(ENC_ALGORITHM)) != 0) { prm_turn(P_RES, accel(1, e)); { char t[20], *p = s_cat(t, "RESONANCE "); prm_text(P_RES, p); toast(t); } }
     if ((e = fm1_enc_take(ENC_PRESETS)) != 0) {
         int32_t n = (int32_t)patch_no + e;
-        patches[patch_no] = ui_patch;            /* (the edits stay with the patch in RAM; SAVE stores them) */
-        patch_no = (uint32_t)(n < 0 ? 0 : n >= (int32_t)NPATCH ? (int32_t)NPATCH - 1 : n);
-        ui_patch = patches[patch_no];
-        patch_touched();
-        dirty |= D_INFO;
+        select_patch((uint32_t)(n < 0 ? 0 : n >= (int32_t)NPATCH ? (int32_t)NPATCH - 1 : n));
     }
     for (k = 0; k < 4u; k++)
         if ((e = fm1_enc_take(ENC_KNOB1 + k)) != 0) prm_turn(cur_page()->p[k], e);
@@ -1188,6 +1290,20 @@ static void leds(void)
 
 /* ---- MIDI in: clock and transport to the interrupt with their time; notes play (and record) */
 static uint32_t idle_ok;
+static uint8_t cc_sent[2] = {0xFFu, 0xFFu};      /* the cutoff and resonance last sent or received (no echo) */
+
+static void cc_out(void)                         /* the filter's knobs out as CC 74 / 71 (a DAW can record them) */
+{
+    static uint32_t t_last;
+    uint32_t v[2], k;
+    if (!(glo.cc & 2u) || fm1_ms - t_last < 15u) return;
+    t_last = fm1_ms;
+    v[0] = (uint32_t)(be_clamp(lg2(ui_patch.cutoff / 20.0f) / 9.96578f, 0.0f, 1.0f) * 127.0f + 0.5f);
+    v[1] = (uint32_t)(be_clamp(ui_patch.res, 0.0f, 1.0f) * 127.0f + 0.5f);
+    for (k = 0; k < 2u; k++)
+        if (v[k] != cc_sent[k]) { cc_sent[k] = (uint8_t)v[k]; midi_send(0xB0u | out_ch(), k ? 71u : 74u, v[k]); }
+}
+
 static void midi_in(void)
 {
     uint8_t st, d1, d2;
@@ -1196,6 +1312,13 @@ static void midi_in(void)
         uint32_t ty = st & 0xF0u;
         if (st >= 0xF8u || st == 0xF2u) { clock_msg(st | (uint32_t)d1 << 8 | (uint32_t)d2 << 16, t); dirty |= D_HDR; continue; }
         if (glo.midi_ch && (st & 15u) != glo.midi_ch - 1u) continue;
+        if (ty == 0xB0u && (glo.cc & 1u) && (d1 == 74u || d1 == 71u)) {   /* the DAW moves the filter */
+            if (d1 == 74u) { ui_patch.cutoff = 20.0f * be_exp2((float)d2 * (9.96578f / 127.0f)); cc_sent[0] = d2; }
+            else { ui_patch.res = (float)d2 * (1.0f / 127.0f); cc_sent[1] = d2; }
+            patch_touched();
+            continue;
+        }
+        if (ty == 0xC0u) { select_patch(d1); continue; }   /* program change: the DAW picks the patch (1..32) */
         if (ty == 0x90u && d2) {
             live_note(d1, d2);
             if (ui.rec && a_running && play_idx >= 0) { snapshot(); write_step(play_idx, 0, 0, d1, d2 >= 100u ? SEQ_ACC : 0u); dirty |= D_MID; }
@@ -1223,6 +1346,7 @@ static void app_main(void)
             midi_send(m & 0xFFu, (m >> 8) & 0xFFu, (m >> 16) & 0xFFu);
         }
         if (ui.preview_note && fm1_ms > ui.preview_off_at) { live_note(ui.preview_note, 0); ui.preview_note = 0; }
+        cc_out();
         if (play_gen != last_gen) {              /* a step: move the playhead (a strip), or redraw if the lane scrolled */
             last_gen = play_gen;
             if (!(dirty & D_MID)) { idle_ok = 1; if (!draw_playhead()) dirty |= D_MID; idle_ok = 0; }

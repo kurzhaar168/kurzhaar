@@ -45,12 +45,16 @@ LOADER_NAME = b"usb_hid_ota.bin"    # the file name the SPL looks for
 DOCKER_IMAGE = os.environ.get("JIELI_DOCKER_IMAGE", "debian:bookworm-slim")
 CFLAGS = ["-Os", "-ffunction-sections", "-fno-builtin", "-Wall", "-Wno-unused-function"]   # keep -Os: with -O2 (unity
                                     # build, usb.c inside) the FM-1's USB-MIDI IN babbled on the device (OberVave, 2026-10-13)
-APP = os.environ.get("DINGHY_APP", "dinghy")                  # the app: firmware/src/<APP>.c (bass: the bass machine)
+APP = os.environ.get("DINGHY_APP", "bass")                    # the app: firmware/src/<APP>.c: bass (Lucca, the default)
+                                                              # or dinghy (the platform's own app, for its tests)
+LUCCA = APP == "bass"
+# extra compiler flags; Lucca's default: the hardware FPU (-mcpu=r3) and the audio code in RAM
+DEFS = os.environ.get("DINGHY_DEFS", "-mcpu=r3 -DBE_RAM_CODE" if LUCCA else "").split()
 ENGINE_OPT = os.environ.get("DINGHY_ENGINE_OPT", "-O2")     # the bass engine's optimisation (firmware/engine)
 ENGINE_SRCS = ["be.c", "clk.c", "player.c", "seq.c", "verb.c"]                  # each its own object (unused ones: --gc-sections)
 # the checks read the disassembly: decode for the CPU the code was built for (-mcpu=r3 has FPU instructions; read
 # as the default CPU, their second halfwords look like other instructions, a "call r0" among them)
-DIS_CPU = [f for f in os.environ.get("DINGHY_DEFS", "").split() if f.startswith("-mcpu=")][-1:]
+DIS_CPU = [f for f in DEFS if f.startswith("-mcpu=")][-1:]
 LINE = re.compile(r"^\s*([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s*\t(.*)$")
 
 # SDK files of AC79NN_SDK_V1.2.1_2023-12-13 (the tested version)
@@ -61,14 +65,15 @@ SDK_SHA256 = {
 }
 
 BOARD = "fm1"                       # fm1 (default) or smk37: BOARD env or --board
-BOARD_PREFIX = {"fm1": "FM-1_99", "smk37": "SMK-37 Pro_99"}   # identity: prefix + minor (0: a dev build)
+BOARD_PREFIX = {"fm1": "FM-1_94" if LUCCA else "FM-1_99", "smk37": "SMK-37 Pro_99"}   # identity: prefix + minor (0: a dev
+                                    # build). Lucca: FM-1_94N; Dinghy: 99N
 BOARD_DEFS = {"fm1": [], "smk37": ["-DBOARD_SMK37=1"]}
 MODELS = {"pro": "SMK-37 Pro", "elite": "SMK-37 Elite", "mke": "MKE-P37"}   # smk37: one keyboard, three names
 DATA_FAMILY = "DINGHY"              # the SMK store's owner tag (store.h): 1..7 of A-Z 0-9. Your fork: your own
-SCREEN_NAME = os.environ.get("DINGHY_SCREEN_NAME", "LUCCA" if os.environ.get("DINGHY_APP") == "bass" else "DINGHY")
+SCREEN_NAME = os.environ.get("DINGHY_SCREEN_NAME", "LUCCA" if LUCCA else "DINGHY")
                                     # the update loader's screen (FM-1, ldr_screen.c): the name and its colour (RGB565)
-SCREEN_COLOUR = 0xFDA8 if os.environ.get("DINGHY_APP") == "bass" else 0xB47F   # Lucca: amber #FFB547; Dinghy: lilac
-PRODUCT = "FM-1_990"                # Dinghy: 99N (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
+SCREEN_COLOUR = 0xFDA8 if LUCCA else 0xB47F   # Lucca: amber #FFB547; Dinghy: lilac
+PRODUCT = BOARD_PREFIX["fm1"] + "0" # Lucca: 94N, Dinghy: 99N (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
 VERSION = None                      # APP_VER for release builds
 
 
@@ -174,12 +179,12 @@ def build_loader():
 
 def build_app():
     flags = [*CFLAGS, *BOARD_DEFS[BOARD], "-Ifirmware/hal", "-Ifirmware/src", "-Ifirmware/gen", f'-DFELUCCA_ID="{PRODUCT}"',
-             f'-DAPP_VER="{VERSION or "0.0"}"']
+             f'-DAPP_VER="{VERSION or ("dev" if LUCCA else "0.0")}"']
     if BOARD == "smk37":
         if not re.fullmatch(r"[A-Z0-9]{1,7}", DATA_FAMILY):
             raise SystemExit("DATA_FAMILY: 1..7 of A-Z 0-9")
         flags.append(f'-DDATA_FAMILY="{DATA_FAMILY}"')
-    flags += os.environ.get("DINGHY_DEFS", "").split()   # (a test build: DINGHY_DEFS=-DFELUCCA_UAC=0 ./build.sh)
+    flags += DEFS                                         # (a test build: DINGHY_DEFS=-DFELUCCA_UAC=0 ./build.sh)
     cmds = [("cc", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
             ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
             ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
@@ -310,7 +315,7 @@ def mmio_check():
 def main():
     global PRODUCT, VERSION, BOARD, APP_SLOT
     ap = argparse.ArgumentParser()
-    ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_99Y, version string X.Y")
+    ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_94Y (Dinghy: 99Y), version string X.Y")
     ap.add_argument("--board", choices=sorted(BOARD_PREFIX), default=None,
                     help="target board: fm1 (default) or smk37 (default: $BOARD, else fm1)")
     ap.add_argument("--model", choices=sorted(MODELS), default=None,
@@ -331,14 +336,17 @@ def main():
         BOARD_PREFIX[BOARD] = BOARD_PREFIX[BOARD].replace(MODELS["pro"], MODELS[model])
         suffix += "-" + model
     PRODUCT = BOARD_PREFIX[BOARD] + "0"
-    name = f"dinghy{suffix}.fwsc"
+    pkg = "lucca" if LUCCA else "dinghy"
+    if LUCCA and BOARD != "fm1":
+        raise SystemExit("Lucca is made for the FM-1 (its keys, buttons and knobs): BOARD=fm1")
+    name = f"{pkg}{suffix}.fwsc"
     if a.release:                   # one digit each: the identity has room for two (X.Y; a .Z only in the text)
         m = re.fullmatch(r"(\d)\.(\d)(\.\d)?(-[A-Za-z0-9]+)?", a.release)
         if not m:
             raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z or X.Y-suffix, one digit each")
         PRODUCT = BOARD_PREFIX[BOARD] + m[2]
         VERSION = m[1] + "." + m[2] + (m[3] or "")
-        name = f"dinghy-{a.release}{suffix}.fwsc"
+        name = f"{pkg}-{a.release}{suffix}.fwsc"
     fm1pkg_make.SDK = a.sdk
     for rel, sha in SDK_SHA256.items():          # fail early without the SDK
         if hashlib.sha256(fm1pkg_make.sdk_file(rel)).hexdigest() != sha:

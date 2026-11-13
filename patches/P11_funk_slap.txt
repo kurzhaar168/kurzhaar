@@ -1,0 +1,15 @@
+# Funk slap: a saw with a very short, bright filter envelope, keytracked; plays hard and soft (velocity).
+osc1_wave = 0
+drive = 0.3
+cutoff = 500
+res = 0.35
+keytrack = 0.8
+fenv_amt = 4.0
+f_d = 0.09
+a_a = 0.001
+a_d = 0.25
+a_s = 0.2
+a_r = 0.05
+vel_sens = 0.8
+accent = 0.6
+level = 3

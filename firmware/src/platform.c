@@ -365,7 +365,11 @@ void fm1_timer5_irq(void)
 }
 extern void isr_timer5(void);
 
-/* ---- the sound: ALNK0 I2S, two halves; the app renders, the MASTER knob scales, Q15 -> 24 bit (-6 dBFS ceiling) */
+/* ---- the sound: ALNK0 I2S, two halves; the app renders, the MASTER knob scales, Q15 -> 24 bit (-6 dBFS ceiling;
+ * FM1_OUT_SHIFT 8: the full range, for an app that limits its own peaks: the FM-1's output is clean up to -1 dBFS) */
+#ifndef FM1_OUT_SHIFT
+#define FM1_OUT_SHIFT 7
+#endif
 static int32_t abuf[2u * HALF_WORDS] __attribute__((aligned(4)));
 static volatile int32_t master_q12 = 2048;
 static void app_audio(int32_t *out, uint32_t n);
@@ -397,7 +401,7 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
         for (b = 0; b < HALF_FRAMES; b += 32u)
             UAC_ONLY(uac_tap(o + 2u * b, 32u));   /* the computer records what the speaker plays */
         for (i = 0; i < HALF_WORDS; i++)
-            o[i] <<= 7;
+            o[i] <<= FM1_OUT_SHIFT;
         fm1_audio_ack_half();
     }
     in_audio = 0;

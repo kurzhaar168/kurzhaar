@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* The bass engine (be.h). Float throughout; the FM-1 runs it with its FPU (-mcpu=r3). */
 #include "be.h"
 #include "be_math.h"
@@ -40,7 +41,10 @@ void be_patch_default(be_patch_t *p)
     p->vel_sens = 0.5f; p->accent = 0.5f;
     p->glide = 0.06f; p->glide_mode = BE_GLIDE_LEGATO;
     p->analog = 0.5f; p->sat = 0.2f; p->hpf = 20.0f; p->level = 0.0f;
-    p->lfo_rate = 3.0f; p->lfo_depth = 0.0f; p->lfo_dest = 1.0f; p->lfo_shape = 0.0f;
+    p->lfo1_rate = 2.0f; p->lfo1_shape = BE_LFO_SINE; p->lfo1_dest = BE_TO_OFF; p->lfo1_depth = 0.0f;
+    p->lfo1_sync = 0.0f; p->lfo1_retrig = 0.0f;
+    p->lfo2_rate = 8.0f; p->lfo2_shape = BE_LFO_TRI; p->lfo2_dest = BE_TO_OFF; p->lfo2_depth = 0.0f;
+    p->lfo2_sync = 1.0f; p->lfo2_retrig = 0.0f;
     p->verb_mix = 0.0f; p->verb_decay = 1.5f; p->verb_tone = 0.5f; p->verb_lowcut = 200.0f;
 }
 
@@ -78,6 +82,18 @@ void be_patch_changed(be_t *e)
     e->sm_c = coef(0.002f, e->fs);
 }
 
+const float BE_LFO_DIV[BE_LFO_NDIV] = {16.0f, 8.0f, 4.0f, 2.0f, 1.5f, 1.0f, 0.6666667f, 0.75f, 0.5f, 0.3333333f,
+                                       0.25f, 0.1666667f, 0.125f};
+const char *const BE_LFO_DIV_NAME[BE_LFO_NDIV] = {"4 BAR", "2 BAR", "1 BAR", "1/2", "1/4.", "1/4", "1/4T", "1/8.",
+                                                  "1/8", "1/8T", "1/16", "1/16T", "1/32"};
+
+void be_set_tempo(be_t *e, float bpm, float beats)
+{
+    e->bpm = be_clamp(bpm, 20.0f, 400.0f);
+    e->beat_inc = e->bpm / (60.0f * e->fs);
+    if (beats >= 0.0f) e->beats = beats;         /* playing: the song position (the synced LFOs lock to it) */
+}
+
 void be_init(be_t *e, float fs)
 {
     uint32_t i;
@@ -86,9 +102,11 @@ void be_init(be_t *e, float fs)
     e->fs = fs;
     e->fs2 = fs * (float)OS;
     e->inv_fs2 = 1.0f / e->fs2;
+    e->inv_fs = 1.0f / fs;
     e->rng = 0x9E3779B9u;
     e->pitch = e->pitch_target = 36.0f;
     be_patch_default(&e->p);
+    be_set_tempo(e, 120.0f, 0.0f);
     be_patch_changed(e);
 }
 
@@ -112,6 +130,8 @@ static void start_note(be_t *e, uint8_t note, int legato)
                                                     sounding: leave them running (no click) */
             e->ph1 = 0.0f; e->ph2 = 0.0f; e->subcnt = 0; e->tri1 = e->tri2 = 0.0f;
         }
+        if (p->lfo1_retrig > 0.5f && p->lfo1_sync < 0.5f) e->lfo_ph[0] = 0.0f;   /* retriggered LFOs start over */
+        if (p->lfo2_retrig > 0.5f && p->lfo2_sync < 0.5f) e->lfo_ph[1] = 0.0f;
         e->note_off1 = p->analog * 0.03f * be_noise(&e->rng);   /* a few cents, new every note */
         e->note_off2 = p->analog * 0.03f * be_noise(&e->rng);
         env_gate(&e->fe, 1);
@@ -175,6 +195,29 @@ BE_INL float env_tick(be_env_t *v)
     default: break;
     }
     return v->v;
+}
+
+BE_INL float lfo_tick(be_t *e, uint32_t l, float rate, float shape, float sync)   /* -1..1 */
+{
+    float ph = e->lfo_ph[l], prev = ph;
+    if (sync > 0.5f) {                           /* the phase from the song position: locked to the bar */
+        uint32_t d = (uint32_t)be_clamp(rate, 0.0f, (float)(BE_LFO_NDIV - 1u));
+        float x = e->beats / BE_LFO_DIV[d];
+        ph = x - (float)(int32_t)x;
+    } else {
+        ph += be_clamp(rate, 0.01f, 40.0f) * e->inv_fs;
+        if (ph >= 1.0f) ph -= 1.0f;
+    }
+    e->lfo_ph[l] = ph;
+    if (ph < prev) e->lfo_sh[l] = be_noise(&e->rng);   /* a new cycle: a new sample-and-hold value */
+    switch ((int32_t)shape) {
+    case BE_LFO_TRI: return ph < 0.5f ? 4.0f * ph - 1.0f : 3.0f - 4.0f * ph;
+    case BE_LFO_SAWDN: return 1.0f - 2.0f * ph;
+    case BE_LFO_SAWUP: return 2.0f * ph - 1.0f;
+    case BE_LFO_SQUARE: return ph < 0.5f ? 1.0f : -1.0f;
+    case BE_LFO_SH: return e->lfo_sh[l];
+    default: return be_sin2pi(ph);
+    }
 }
 
 BE_INL float blep(float t, float dt)      /* polyBLEP residual of a unit step at t = 0 */
@@ -284,19 +327,42 @@ BE_HOT static void be_render_hot(be_t *e, float *out, uint32_t n)
 
     for (i = 0; i < n; i++) {
         float f1, f2, dt1, dt2, fe, ae, fc, g, amp, velk, o, x2[2];
+        float m_pitch, m_cut, m_res, m_pw, m_amp, m_drive, m_verb, dg, mk, rr, cc, pa, pb;
 
         if ((e->tick++ & 31u) == 0u) {           /* slow random wander (~0.5 Hz), per oscillator and filter */
             e->drift1 += 0.01f * (be_noise(&e->rng) - e->drift1);
             e->drift2 += 0.01f * (be_noise(&e->rng) - e->drift2);
             e->drift_f += 0.01f * (be_noise(&e->rng) - e->drift_f);
         }
+        e->beats += e->beat_inc;
+        m_pitch = m_cut = m_res = m_pw = m_drive = m_verb = 0.0f;
+        m_amp = 1.0f;
+        for (k = 0; k < 2u; k++) {               /* the LFOs: what they move, by how much */
+            const float *lf = k ? &p->lfo2_rate : &p->lfo1_rate;   /* rate shape dest depth sync retrig */
+            float raw, v, d = lf[3];
+            int32_t to = (int32_t)(lf[2] + 0.5f);
+            if (to == BE_TO_OFF || d == 0.0f) continue;
+            raw = lfo_tick(e, k, lf[0], lf[1], lf[4]);
+            v = raw * d;
+            switch (to) {
+            case BE_TO_PITCH: m_pitch += 12.0f * v; break;      /* semitones (vibrato: a small depth) */
+            case BE_TO_CUTOFF: m_cut += 5.0f * v; break;        /* octaves */
+            case BE_TO_RES: m_res += 0.5f * v; break;
+            case BE_TO_PW: m_pw += 0.45f * v; break;
+            case BE_TO_AMP: m_amp *= 1.0f - (d < 0.0f ? -d : d) * 0.5f * (1.0f - raw); break;   /* tremolo: dips only */
+            case BE_TO_DRIVE: m_drive += 3.0f * v; break;       /* octaves of drive gain */
+            case BE_TO_REVERB: m_verb += 0.5f * v; break;
+            default: break;
+            }
+        }
+        e->mod_verb = m_verb;
         if (e->pitch != e->pitch_target)
             e->pitch += (e->pitch_target - e->pitch) * e->glide_c;
         if ((e->tick & 3u) == 1u || e->pitch_new) {   /* the oscillators' pitch: every 4th sample (11 kHz; glides
                                                            and drift change far slower), and at once on a new note */
             e->pitch_new = 0;
-            f1 = 440.0f * be_exp2((e->pitch + e->note_off1 + drift_amt * e->drift1 * 4.0f - 69.0f) * (1.0f / 12.0f));
-            f2 = 440.0f * be_exp2((e->pitch + p->osc2_semi + p->osc2_detune * 0.01f + e->note_off2
+            f1 = 440.0f * be_exp2((e->pitch + m_pitch + e->note_off1 + drift_amt * e->drift1 * 4.0f - 69.0f) * (1.0f / 12.0f));
+            f2 = 440.0f * be_exp2((e->pitch + m_pitch + p->osc2_semi + p->osc2_detune * 0.01f + e->note_off2
                                    + drift_amt * e->drift2 * 4.0f - 69.0f) * (1.0f / 12.0f));
             e->dt1 = be_clamp(f1 * e->inv_fs2, 0.0f, 0.45f);
             e->dt2 = be_clamp(f2 * e->inv_fs2, 0.0f, 0.45f);
@@ -312,11 +378,16 @@ BE_HOT static void be_render_hot(be_t *e, float *out, uint32_t n)
         velk = 1.0f - p->vel_sens + p->vel_sens * e->vel_s;
         fc = p->cutoff * be_exp2(p->keytrack * (e->pitch - 48.0f) * (1.0f / 12.0f)
                                  + fe * (p->fenv_amt * velk + e->acc_s * 2.5f)
-                                 + e->sweep * e->acc_s + e->spread_cut + p->analog * 0.05f * e->drift_f);
+                                 + e->sweep * e->acc_s + e->spread_cut + p->analog * 0.05f * e->drift_f + m_cut);
         fc = be_clamp(fc, 8.0f, 20000.0f);
         g = be_tan(BE_PI * fc * e->inv_fs2);
+        if (m_drive != 0.0f) { dg = drive_g * be_exp2(m_drive); mk = 0.5f / (0.6f + 0.4f * dg); } else { dg = drive_g; mk = makeup; }
+        if (m_res != 0.0f) { rr = be_clamp(r + 4.15f * m_res, 0.0f, 4.3f); cc = 1.0f + be_clamp(p->bass_comp, 0.0f, 1.0f) * rr; }
+        else { rr = r; cc = comp; }
+        if (m_pw != 0.0f) { pa = be_clamp(pw1 + m_pw, 0.05f, 0.95f); pb = be_clamp(pw2 + m_pw, 0.05f, 0.95f); }
+        else { pa = pw1; pb = pw2; }
         amp = ae * (1.0f - 0.5f * p->vel_sens + 0.5f * p->vel_sens * e->vel_s) * (1.0f + 0.35f * e->acc_s)
-              * e->out_gain * makeup;
+              * e->out_gain * mk * m_amp;
 
         for (k = 0; k < 2u; k++) {               /* two 2x samples, each from two 4x samples */
             uint32_t q;
@@ -324,9 +395,9 @@ BE_HOT static void be_render_hot(be_t *e, float *out, uint32_t n)
             for (q = 0; q < 2u; q++) {
                 float t1 = e->ph1, t2 = e->ph2, sp, m, y;
                 if (BE_SKIP(4u)) m = 0.25f; else {
-                m = p->osc1_level * osc(p->osc1_wave, t1, dt1, pw1, &e->tri1);
+                m = p->osc1_level * osc(p->osc1_wave, t1, dt1, pa, &e->tri1);
                 if (p->osc2_level > 0.0f)
-                    m += p->osc2_level * osc(p->osc2_wave, t2, dt2, pw2, &e->tri2);
+                    m += p->osc2_level * osc(p->osc2_wave, t2, dt2, pb, &e->tri2);
                 if (p->sub_level > 0.0f) {       /* the sub: osc 1 divided down, like a flip-flop */
                     sp = ((float)(e->subcnt & (uint32_t)(subn - 1.0f)) + t1) / subn;
                     m += p->sub_level * (p->sub_wave > 0.5f ? be_sin2pi(sp) : square(sp, dt1 / subn, 0.5f));
@@ -347,7 +418,7 @@ BE_HOT static void be_render_hot(be_t *e, float *out, uint32_t n)
                     m = v2;
                 }
 
-                y = BE_SKIP(1u) ? m : ladder(e, m * drive_g * comp, g, r, p->pole2);
+                y = BE_SKIP(1u) ? m : ladder(e, m * dg * cc, g, rr, p->pole2);
                 x4[q] = y * amp;
             }
             {                                    /* at 2x: saturation and the soft limit (their harmonics still

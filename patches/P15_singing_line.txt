@@ -1,0 +1,24 @@
+# Singing line: an open saw with a gentle vibrato (LFO 1 on pitch), glide on every note, a little room.
+osc1_wave = 0
+drive = 0.3
+cutoff = 1200
+res = 0.25
+keytrack = 0.6
+fenv_amt = 1.0
+f_d = 0.5
+f_s = 0.6
+a_a = 0.02
+a_s = 1.0
+a_r = 0.15
+glide = 0.12
+glide_mode = 2
+lfo1_sync = 0
+lfo1_rate = 5.5
+lfo1_shape = 0
+lfo1_dest = 1
+lfo1_depth = 0.02
+lfo1_retrig = 1
+verb_mix = 0.2
+verb_decay = 1.6
+verb_lowcut = 250
+level = -3

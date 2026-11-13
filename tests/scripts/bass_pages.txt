@@ -1,0 +1,17 @@
+# The LFO, CLOCK, MIDI and ABOUT pages. Splash skipped by the first button. PRESETS +4 = patch 5 (house pump)
+100 btn 8
+300 enc 6 4
+500 btn 5
+800 shot
+900 btn 5
+1100 btn 5
+1300 shot
+1400 btn 7
+1500 enc 4 -2
+1700 shot
+1800 btn 7
+1900 enc 5 3
+2100 shot
+2200 btn 7
+2400 shot
+2600 end

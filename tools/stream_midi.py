@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 JazzMasterT
 """Play a MIDI file to the FM-1 over USB with a running MIDI clock (24 per quarter) and Start/Stop, the way a DAW
 would. Load and timing test for the engine. .venv/bin/python tools/stream_midi.py [file.mid] [--loops N] [--port P]"""
 import argparse, time

@@ -1,4 +1,4 @@
-# P2 Fat two-osc: two slightly detuned saws and a square an octave down, mixer driving the ladder hard.
+# Fat two-osc: two slightly detuned saws and a square an octave down, mixer driving the ladder hard.
 osc1_wave = 0
 osc1_level = 1
 osc2_wave = 0
@@ -28,4 +28,4 @@ glide_mode = 1
 analog = 0.6
 sat = 0.3
 hpf = 20
-level = -2
+level = -6

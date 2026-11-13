@@ -1,0 +1,22 @@
+# Trance roll: detuned saws, short; LFO 2 lifts the filter over every bar (a rising saw, locked to the bar).
+osc1_wave = 0
+osc2_wave = 0
+osc2_detune = 10
+osc2_level = 0.7
+drive = 0.4
+cutoff = 400
+res = 0.25
+keytrack = 0.4
+fenv_amt = 3.5
+f_d = 0.1
+f_s = 0.0
+a_a = 0.001
+a_d = 0.12
+a_s = 0.0
+a_r = 0.04
+lfo2_sync = 1
+lfo2_rate = 2
+lfo2_shape = 3
+lfo2_dest = 2
+lfo2_depth = 0.3
+level = 1

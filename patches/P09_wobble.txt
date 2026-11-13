@@ -1,0 +1,21 @@
+# Wobble: saws an octave apart; LFO 1 opens and closes the filter in 1/8s, locked to the tempo. Driven hard.
+osc1_wave = 0
+osc2_wave = 0
+osc2_semi = -12
+osc2_detune = 7
+osc2_level = 0.8
+drive = 0.6
+cutoff = 150
+res = 0.45
+keytrack = 0.3
+fenv_amt = 0.0
+a_a = 0.002
+a_s = 1.0
+a_r = 0.05
+sat = 0.5
+lfo1_sync = 1
+lfo1_rate = 8
+lfo1_shape = 0
+lfo1_dest = 2
+lfo1_depth = 0.8
+level = -3

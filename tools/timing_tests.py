@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 JazzMasterT
 """Timing tests (docs/DESIGN.md section 1, "Timing"): the clock and player (tests/clock_test.c) against scripted
 clock streams. Exit 1 if a criterion fails.   .venv/bin/python tools/timing_tests.py [-v]
 
@@ -154,6 +155,25 @@ L = 15.0 * FS * 10.0 / 1200
 e_even = steps[10] - (256 + 10 * L - 4.0 * MS)
 e_odd = steps[11] - (256 + 11 * L + (0.62 - 0.5) * 2 * L - 4.0 * MS)
 check("swing 62 % and 4 ms lead: placement error", max(abs(e_even), abs(e_odd)), 1.0, "samples")
+
+# ---- 9. step rates: internal, exact (1/8T: 8 ticks, 1/32: 3, 1/4: 24); external 1/8 (12 ticks) on the tick grid
+for tps, name in ((8, "1/8T"), (3, "1/32"), (24, "1/4")):
+    steps = run([(0, "bpm 1200"), (0, f"rate {tps}"), (0, "play")], 60.5)
+    L = 25.0 * FS * tps / 1200
+    ks = np.array(sorted(steps))
+    err = np.array([steps[k] for k in ks]) - (256 + ks * L)
+    check(f"internal {name} at 120 BPM, 1 min: max error vs ideal grid", np.abs(err).max(), 1.0, "samples")
+true = tick_grid(lambda k: 120.0, 0.5, 24 * 2 * 30)
+steps = run([(0, "rate 12"), (0.1 * FS, "start")] + ticks(true), 30.0)
+ks = np.array(sorted(k for k in steps if k >= 4 and 12 * k < len(true)))
+r = np.array([steps[k] - true[12 * k] for k in ks]) / MS
+check("external 1/8 (12 ticks a step): jitter around the tick grid (99th percentile)", np.percentile(np.abs(r - np.median(r)), 99), 0.12)
+# a rate change while playing: from 1/16 to 1/8 at 2 s, the steps after it on the 1/8 grid of the same timeline
+steps = run([(0, "bpm 1200"), (0, "play"), (2.0 * FS, "rate 12")], 5.0)
+L16, L8 = 25.0 * FS * 6 / 1200, 25.0 * FS * 12 / 1200
+late = [steps[k] for k in sorted(steps) if steps[k] > 2.2 * FS]
+off = [((t - 256) / L8) % 1.0 for t in late]
+check("rate change 1/16 -> 1/8 while playing: later steps on the 1/8 grid (worst, steps)", max(min(o, 1 - o) for o in off), 0.01, "steps")
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

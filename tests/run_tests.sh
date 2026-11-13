@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Dinghy's host tests (no hardware). Run from the repo root after building, the SMK-37 first, the FM-1 last
+# The platform's host tests (Dinghy's; no hardware). Run from the repo root after building, the SMK-37 first, the FM-1 last
 # (both boards write the same build/ intermediates; the tests expect the FM-1 binaries):
 #   BOARD=smk37 sh build.sh; BOARD=smk37 MODEL=elite sh build.sh; BOARD=smk37 MODEL=mke sh build.sh; sh build.sh
 #   sh tests/run_tests.sh
@@ -8,6 +8,7 @@
 # update path (ota.c, the loader, tools/fm1_install.py; from the fm1-to-smk37 kit's reference layer,
 # genkigenki/sloop-fm1 smk37) and the packages.
 set -e
+export DINGHY_APP=dinghy                         # these test the platform, with Dinghy's app (Lucca's: run_lucca_tests.sh)
 export AC79_SDK="${AC79_SDK:-$HOME/fw-AC79_AIoT_SDK}"   # (fm1pkg_make.py: the SDK files of a package)
 cd "$(dirname "$0")/.."
 OUT=build/host

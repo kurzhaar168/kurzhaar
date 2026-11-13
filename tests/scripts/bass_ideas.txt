@@ -1,0 +1,13 @@
+# ARP: hold = a new bassline, tap = mutate; HOME held = undo. A program change (patch 9: wobble) from MIDI.
+100 btn 8
+300 btndown 10
+1000 btnup 10
+1200 shot
+1300 btn 10
+1500 shot
+1600 btndown 8
+2300 btnup 8
+2500 shot
+2600 midi 0xC0 8 0
+2800 shot
+3000 end

@@ -1,0 +1,24 @@
+# Deep dub: a triangle and a sine sub, dark; a long reverb whose send swells every two bars (LFO 2): dub throws.
+osc1_wave = 2
+sub_wave = 1
+sub_level = 1.0
+drive = 0.25
+cutoff = 220
+res = 0.2
+keytrack = 0.4
+fenv_amt = 1.2
+f_d = 0.4
+a_a = 0.005
+a_d = 1.0
+a_s = 0.7
+a_r = 0.3
+verb_mix = 0.45
+verb_decay = 3.0
+verb_tone = 0.35
+verb_lowcut = 250
+lfo2_sync = 1
+lfo2_rate = 1
+lfo2_shape = 1
+lfo2_dest = 7
+lfo2_depth = 0.3
+level = -3

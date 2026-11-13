@@ -275,8 +275,16 @@ static int usb_cdc_now(void) { return usb_cdc_on; }   /* (the menu: what this st
 static int usb_cdc_now(void) { return 0; }
 #endif
 static const uint8_t STR0[4] = {4, 3, 0x09, 0x04};
+#if defined(APP_USB_MANUFACTURER) && !defined(FELUCCA_LOADER)
+/* an app's own maker's name (ASCII), e.g. #define APP_USB_MANUFACTURER "Me" before platform.c: built on first use */
+static uint8_t STR1[2u + 2u * (sizeof APP_USB_MANUFACTURER - 1u)];
+#define STR1_INIT() do { if (!STR1[0]) { uint32_t i_; STR1[0] = sizeof STR1; STR1[1] = 3; \
+    for (i_ = 0; i_ + 1u < sizeof APP_USB_MANUFACTURER; i_++) { STR1[2u + 2u * i_] = (uint8_t)APP_USB_MANUFACTURER[i_]; STR1[3u + 2u * i_] = 0; } } } while (0)
+#else
+#define STR1_INIT() do { } while (0)
 static const uint8_t STR1[] = {42, 3, 'H', 0, 0xFC, 0, 'g', 0, 'e', 0, 'l', 0, 't', 0, 'o', 0, 'n', 0, ' ', 0, 'I', 0,
                                'n', 0, 's', 0, 't', 0, 'r', 0, 'u', 0, 'm', 0, 'e', 0, 'n', 0, 't', 0, 's', 0};
+#endif
 #ifdef FELUCCA_LOADER
 static const uint8_t STR2[] = {30, 3, 'F', 0, 'e', 0, 'l', 0, 'u', 0, 'c', 0, 'c', 0, 'a', 0, ' ', 0, 'U', 0, 'p', 0,
                                'd', 0, 'a', 0, 't', 0, 'e', 0};
@@ -312,6 +320,7 @@ static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
             *l = sizeof STR0;
             return 1;
         case 1:
+            STR1_INIT();
             *d = STR1;
             *l = sizeof STR1;
             return 1;

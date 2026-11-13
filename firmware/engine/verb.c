@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* The reverb (verb.h). */
 #include "verb.h"
 #include "be_math.h"

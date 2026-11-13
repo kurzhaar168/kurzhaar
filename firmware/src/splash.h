@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* The splash at power-on: a synth-sunset sky fades up, Lucca rises into the frame, the LUCCA logo wipes in and a
  * glint runs across it, "das Bassmaschine" fades in. ~4 s; any key or button skips it.
  * The art (three layers, smooth edges): splash_art.h, made by tools/gen_splash_art.py from a photo of Lucca. */

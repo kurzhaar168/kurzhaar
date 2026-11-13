@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* The player: per audio block, the steps that fall inside it, each at its exact sample (docs/DESIGN.md 5.1).
  * Swing delays the odd 16ths; the timing offset plays everything early by a fixed time (to cancel the output's
  * latency, 5.4). The caller (the audio interrupt) renders the engine up to each step's sample, then plays it. */

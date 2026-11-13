@@ -20,7 +20,7 @@ Regenerate with `.venv/bin/python tools/make_ref_midi.py`.
 ## The three Diva patches
 
 Start each from Diva's **init patch**. Settings below are the intent with suggested values; exact values do
-not matter because you will **save each patch** and the saved preset file tells me exactly what you set.
+not matter because each patch is **saved** and the preset file records exactly what was set.
 
 Common to all three:
 - **Main**: voice mode **Mono**, **Accuracy: Divine** (offline render quality), glide off unless stated.

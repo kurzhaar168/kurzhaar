@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* The sequencer's data (firmware/engine/seq.c) on the Mac.   cc -o build/host/seq_test tests/seq_test.c && ... */
 #include <stdio.h>
+#include <string.h>
 #include "../firmware/engine/seq.c"
 
 static int fails;
@@ -65,6 +67,31 @@ int main(void)
     seq_rotate(&p, 1); CHECK(p.s[0].deg == 15 && p.s[1].deg == 0, "rotate right");
     seq_rotate(&p, -1); seq_rotate(&p, -1); CHECK(p.s[0].deg == 1 && p.s[15].deg == 0, "rotate left");
     CHECK(sizeof(seq_step_t) == 4 && sizeof(seq_pat_t) == 260, "sizes: step %zu, pattern %zu", sizeof(seq_step_t), sizeof(seq_pat_t));
+
+    /* ideas: a new bassline and mutations stay in the scale (no chromatic notes), step 1 sounds and stays */
+    {
+        uint32_t rng = 12345u, run, sc2, on_total = 0;
+        for (sc2 = 0; sc2 < seq_nscales; sc2++)
+            for (run = 0; run < 200u; run++) {
+                seq_key_t kk = {(uint8_t)(run % 12u), (uint8_t)sc2, 0, (int8_t)((int32_t)(run % 5u) - 2)};
+                seq_step_t first;
+                uint32_t changed;
+                seq_generate(&kk, &p, &rng);
+                CHECK(p.len == 16 && (p.s[0].flags & SEQ_ON) && (p.s[0].flags & SEQ_ACC), "generate: 16 steps, step 1 accented");
+                for (i = 0; i < 16u; i++) {
+                    if (!(p.s[i].flags & SEQ_ON)) continue;
+                    on_total++;
+                    CHECK(seq_chrom(&p.s[i]) == 0, "generate: in the scale");
+                    CHECK(seq_note(&kk, &p.s[i]) >= 12 && seq_note(&kk, &p.s[i]) <= 72, "generate: a bass range note (%d)", seq_note(&kk, &p.s[i]));
+                }
+                first = p.s[0];
+                changed = seq_mutate(&kk, &p, &rng);
+                CHECK(changed >= 1u && changed <= 3u, "mutate: 1..3 steps (%u)", changed);
+                CHECK(memcmp(&first, &p.s[0], sizeof first) == 0, "mutate: step 1 kept");
+                for (i = 0; i < 16u; i++) CHECK(seq_chrom(&p.s[i]) == 0, "mutate: in the scale");
+            }
+        CHECK(on_total > seq_nscales * 200u * 7u && on_total < seq_nscales * 200u * 12u, "generate: 7..12 notes a bar on average (%u)", on_total);
+    }
 
     printf(fails ? "%d failed\n" : "all passed\n", fails);
     return fails != 0;

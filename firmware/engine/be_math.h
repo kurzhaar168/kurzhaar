@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* Bass engine maths: no libm on the FM-1, so the few functions the engine needs, in float, the same on the Mac
  * and on the chip (bit-identical results: no host libm involved). */
 #ifndef BE_MATH_H

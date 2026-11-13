@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* The clock (docs/DESIGN.md section 5): where the steps (16ths) fall, in samples.
  *
  * Time is the audio sample count (uint32, wraps after ~27 h; compare with (int32_t)(a - b)).
- *  - Internal: the tempo as an exact fraction, step length = 15 * fs * 10 / bpm10 samples; each step's position is
+ *  - Internal: the tempo as an exact fraction, step length = 25 * fs * tps / bpm10 samples (a 16th: tps 6); each step's position is
  *    floor(k * num / den) carried exactly (Bresenham), so the grid never drifts.
  *  - External (MIDI clock, 24 per quarter, 6 per step): a phase-locked loop on the ticks' arrival times estimates
  *    where tick n falls and the tick period; steps are placed on that estimate, not on the (jittery) arrivals.
@@ -22,6 +23,8 @@ typedef struct {
     /* internal: the next step's time = next_s exactly; step length num/den samples (q + r/den) */
     uint32_t next_s, num, den, q, r, rem;
     uint32_t bpm10;
+    uint32_t tps;                                /* the step: MIDI clock ticks (24 a beat): 24 1/4, 12 1/8, 8 1/8T, 6 1/16,
+                                                    4 1/16T, 3 1/32 */
     /* external PLL: tick `tick` is estimated at ref_s + ref_f; P = samples per tick */
     uint8_t have_ref;
     uint32_t nticks;                             /* ticks seen since the PLL (re)started */
@@ -36,6 +39,7 @@ typedef struct {
 
 void clk_init(clk_t *c, float fs);
 void clk_set_bpm(clk_t *c, uint32_t bpm10, uint32_t now);    /* internal tempo, 0.1 BPM steps (300..3000) */
+void clk_set_rate(clk_t *c, uint32_t tps);       /* the step rate (ticks a step); playing: from the next step */
 void clk_play(clk_t *c, uint32_t now);           /* internal: start at step 0, now */
 void clk_stop(clk_t *c);
 void clk_advance(clk_t *c);                      /* step c->step has been played: on to the next */

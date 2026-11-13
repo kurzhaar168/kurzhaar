@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* The clock (clk.h). */
 #include "clk.h"
 
@@ -33,7 +34,22 @@ void clk_init(clk_t *c, float fs)
     for (i = 0; i < sizeof *c; i++) b[i] = 0;
     c->fs = fs;
     c->P = fs * 60.0f / (120.0f * 24.0f);
+    c->tps = 6u;                                 /* 16ths */
     clk_set_bpm(c, 1200u, 0u);
+}
+
+void clk_set_rate(clk_t *c, uint32_t tps)
+{
+    uint32_t old = c->tps;
+    if (tps < 1u) tps = 1u;
+    if (tps == old) return;
+    if (c->ext) {                                /* the next step: the first boundary of the new size after the tick */
+        int32_t t = c->tick + 1;
+        c->step = (t + (int32_t)tps - 1) / (int32_t)tps;
+    } else if (old)                              /* internal: the next step stays where it is, renumbered */
+        c->step = (int32_t)(((uint32_t)c->step * old + tps / 2u) / tps);   /* (32-bit: no 64-bit division on the FM-1) */
+    c->tps = tps;
+    clk_set_bpm(c, c->bpm10 ? c->bpm10 : 1200u, 0u);   /* (the step's length in samples) */
 }
 
 void clk_set_bpm(clk_t *c, uint32_t bpm10, uint32_t now)
@@ -42,7 +58,8 @@ void clk_set_bpm(clk_t *c, uint32_t bpm10, uint32_t now)
     if (bpm10 < 300u) bpm10 = 300u;
     if (bpm10 > 3000u) bpm10 = 3000u;
     c->bpm10 = bpm10;
-    c->num = (uint32_t)(c->fs * 150.0f + 0.5f);  /* 15 * fs * 10: a step of a 16th at bpm10 / 10 BPM */
+    c->num = (uint32_t)(c->fs * 25.0f * (float)c->tps + 0.5f);   /* 60 * fs * 10 * tps / 24: a step of tps ticks at
+                                                                   bpm10 / 10 BPM (a 16th: tps 6) */
     c->den = bpm10;
     c->q = c->num / c->den;
     c->r = c->num % c->den;
@@ -76,7 +93,7 @@ void clk_advance(clk_t *c)                       /* the step c->step has been pl
 
 float clk_step_len(const clk_t *c)
 {
-    return c->ext ? 6.0f * c->P : (float)c->num / (float)c->den;
+    return c->ext ? (float)c->tps * c->P : (float)c->num / (float)c->den;
 }
 
 float clk_tempo(const clk_t *c)
@@ -91,7 +108,7 @@ float clk_step_offset(const clk_t *c, int32_t k, uint32_t from)
         return k == c->step ? base : base + (float)(k - c->step) * clk_step_len(c);
     }
     /* tick 6k, from the estimate of tick c->tick */
-    return (float)(int32_t)(c->ref_s - from) + c->ref_f + (float)(6 * k - c->tick) * c->P;
+    return (float)(int32_t)(c->ref_s - from) + c->ref_f + (float)((int32_t)c->tps * k - c->tick) * c->P;
 }
 
 /* ---- external */
@@ -105,8 +122,13 @@ static void ref_set(clk_t *c, uint32_t s, float f)   /* keep the fraction in 0..
 }
 
 void clk_ext_start(clk_t *c) { c->armed = 1; c->step = 0; c->tick = -1; }
-void clk_ext_continue(clk_t *c) { c->armed = 1; c->tick = 6 * c->step - 1; }
-void clk_ext_spp(clk_t *c, uint32_t pos16) { c->step = (int32_t)pos16; c->tick = 6 * c->step - 1; }
+void clk_ext_continue(clk_t *c) { c->armed = 1; c->tick = (int32_t)c->tps * c->step - 1; }
+void clk_ext_spp(clk_t *c, uint32_t pos16)      /* in 16ths (6 ticks): the first step at or after it */
+{
+    int32_t t = 6 * (int32_t)pos16;
+    c->step = (t + (int32_t)c->tps - 1) / (int32_t)c->tps;
+    c->tick = t - 1;
+}
 
 void clk_ext_stop(clk_t *c)
 {
@@ -162,10 +184,10 @@ void clk_ext_tick(clk_t *c, uint32_t t, float tf)
     c->P += b * e / ((float)missed + 1.0f);
     if (c->nticks < 0xFFFFu) c->nticks++;
 started:
-    if (c->armed && c->tick >= 6 * c->step) {    /* Start / Continue: the first tick is the step's time */
+    if (c->armed && c->tick >= (int32_t)c->tps * c->step) {   /* Start / Continue: the first tick is the step's time */
         c->armed = 0;
         c->running = 1;
-        c->tick = 6 * c->step;
+        c->tick = (int32_t)c->tps * c->step;
     }
 }
 

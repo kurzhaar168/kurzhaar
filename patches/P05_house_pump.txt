@@ -1,0 +1,22 @@
+# House pump: a pulse and a square sub; LFO 1 dips the level on every beat (synced 1/4), like a sidechain.
+osc1_wave = 1
+osc1_pw = 0.35
+sub_wave = 0
+sub_level = 0.5
+drive = 0.35
+cutoff = 380
+res = 0.3
+keytrack = 0.5
+fenv_amt = 3.0
+f_d = 0.15
+a_a = 0.001
+a_d = 0.25
+a_s = 0.7
+a_r = 0.06
+accent = 0.5
+lfo1_sync = 1
+lfo1_rate = 5
+lfo1_shape = 3
+lfo1_dest = 5
+lfo1_depth = 0.55
+level = -2

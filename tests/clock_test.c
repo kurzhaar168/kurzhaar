@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* The clock and player on the Mac, driven by a scenario: messages with arrival times (in samples), delivered at the
  * next audio block like on the FM-1 (the main loop timestamps them; the audio interrupt takes them at its next
  * block). Prints where each step was played. tools/timing_tests.py writes the scenarios and checks the results.
  *   build/host/clock_test SCENARIO.txt
  * SCENARIO lines: "fs F", "block N", "swing X", "lead MS", "end SAMPLE", then "TIME msg [arg]" with msg one of
- * tick, start, stop, cont, spp POS16, play, halt, bpm BPM10 (TIME in samples, may have a fraction). */
+ * tick, start, stop, cont, spp POS16, play, halt, bpm BPM10, rate TICKS-A-STEP (TIME in samples, may have a fraction). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,6 +60,7 @@ int main(int argc, char **argv)
             else if (!strcmp(w, "play")) clk_play(&c, S);
             else if (!strcmp(w, "halt")) clk_stop(&c);
             else if (!strcmp(w, "bpm")) clk_set_bpm(&c, m[i].arg, S);
+            else if (!strcmp(w, "rate")) clk_set_rate(&c, m[i].arg);
             i++;
         }
         clk_ext_poll(&c, S);

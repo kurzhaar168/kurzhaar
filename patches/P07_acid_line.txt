@@ -1,0 +1,19 @@
+# Acid line: one saw, a squelchy resonance, a big accent, slides, driven.
+osc1_wave = 0
+drive = 0.5
+cutoff = 180
+res = 0.82
+bass_comp = 0.6
+keytrack = 0.3
+fenv_amt = 5.5
+f_d = 0.28
+a_a = 0.001
+a_d = 0.5
+a_s = 0.9
+a_r = 0.03
+vel_sens = 0.3
+accent = 0.9
+glide = 0.06
+glide_mode = 1
+sat = 0.4
+level = -2

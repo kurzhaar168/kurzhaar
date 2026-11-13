@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 JazzMasterT
 """Objective tests of the bass engine against docs/DESIGN.md section 1 (sound criteria).
   .venv/bin/python tools/engine_tests.py        (exit 1 if a criterion fails)"""
 import subprocess, sys, tempfile
@@ -122,6 +123,20 @@ sus = np.zeros_like(hf, dtype=bool)
 sus[int(0.2 * FS):int(0.34 * FS)] = True
 ratio = hf[win].max() / hf[sus].max()
 check("accent / velocity change on a sounding note: 8 kHz+ burst vs the sustained note", ratio, 3.0, unit="x")
+
+# 5. LFOs: a held note's brightness (energy above 1 kHz) pulses at the LFO's rate; synced: at the tempo (120 BPM here)
+from scipy.signal import butter as _bt, sosfilt as _sf
+def lfo_rate(patch):
+    x = render("lfo", {**CLEAN, "cutoff": 400, "drive": 0.3, **patch}, [(0.0, 5.9, 36, 100)], 6.0)[int(1.0 * FS):int(5.5 * FS)]
+    hp = _sf(_bt(4, 1000, "highpass", fs=FS, output="sos"), x)
+    env = np.sqrt(np.convolve(hp ** 2, np.ones(441) / 441, "same"))[::441]          # 100 per second
+    env = env - env.mean()
+    sp = np.abs(np.fft.rfft(env * np.hanning(len(env)))); fq = np.fft.rfftfreq(len(env), 0.01)
+    return fq[1 + np.argmax(sp[1:])]
+r_sync = lfo_rate({"lfo1_dest": 2, "lfo1_depth": 0.4, "lfo1_sync": 1, "lfo1_rate": 5, "lfo1_shape": 0})   # 1/4
+check("LFO synced 1/4 on cutoff at 120 BPM: brightness pulses at (Hz, want 2.0)", abs(r_sync - 2.0), 0.15, unit="Hz off")
+r_free = lfo_rate({"lfo2_dest": 2, "lfo2_depth": 0.4, "lfo2_sync": 0, "lfo2_rate": 3.0, "lfo2_shape": 1})
+check("LFO free 3 Hz on cutoff: brightness pulses at (Hz, want 3.0)", abs(r_free - 3.0), 0.15, unit="Hz off")
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

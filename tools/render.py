@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 JazzMasterT
 """Render MIDI through the bass engine on the Mac (tests/render.c): one WAV per patch.
   .venv/bin/python tools/render.py [--midi refs/midi/00_all.mid] [patches/P1.txt ...]   -> refs/ours/<patch>.wav
 With no patches given, renders every patches/*.txt. Rebuilds build/host/render when its sources changed."""

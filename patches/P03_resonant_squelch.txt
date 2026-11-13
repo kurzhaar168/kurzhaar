@@ -1,4 +1,4 @@
-# P3 Resonant squelch: a square through a resonant ladder, big envelope, accents and legato glide.
+# Resonant squelch: a square through a resonant ladder, big envelope, accents and legato glide.
 osc1_wave = 1      # pulse
 osc1_pw = 0.5
 osc1_level = 1
@@ -23,4 +23,4 @@ glide_mode = 1
 analog = 0.5
 sat = 0.3
 hpf = 20
-level = 0
+level = -6

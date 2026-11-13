@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 JazzMasterT
 """Objective checks on rendered WAVs (docs/DESIGN.md section 1): level, limiter use, DC, clicks.
   .venv/bin/python tools/check_render.py refs/ours/*.wav"""
 import sys

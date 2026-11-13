@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* The reverb: a small stereo feedback-delay network for a bass voice.
  *
  *   mono in -> low cut (the send: the bass's fundamental stays dry) -> 2 allpass diffusers -> 4 delay lines,

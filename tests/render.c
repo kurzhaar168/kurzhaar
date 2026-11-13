@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* Render the bass engine on the Mac: a patch file and a note event list in, a 24-bit mono WAV out.
  *   build/host/render PATCH.txt EVENTS.txt OUT.wav
  * PATCH.txt: "name = value" lines (be_patch_t field names), '#' comments; unset fields keep the defaults.
@@ -19,6 +20,9 @@ static const struct { const char *name; size_t off; } FIELDS[] = {
     F(osc2_detune), F(sub_wave), F(sub_oct), F(sub_level), F(noise_level), F(drive), F(cutoff), F(res),
     F(bass_comp), F(pole2), F(keytrack), F(fenv_amt), F(f_a), F(f_d), F(f_s), F(f_r), F(a_a), F(a_d), F(a_s),
     F(a_r), F(vel_sens), F(accent), F(glide), F(glide_mode), F(analog), F(sat), F(hpf), F(level),
+    F(verb_mix), F(verb_decay), F(verb_tone), F(verb_lowcut),
+    F(lfo1_rate), F(lfo1_shape), F(lfo1_dest), F(lfo1_depth), F(lfo1_sync), F(lfo1_retrig),
+    F(lfo2_rate), F(lfo2_shape), F(lfo2_dest), F(lfo2_depth), F(lfo2_sync), F(lfo2_retrig),
 #undef F
 };
 

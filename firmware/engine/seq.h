@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Copyright (C) 2026 JazzMasterT */
 /* The sequencer's data (docs/DESIGN.md 5.1, 5.2): patterns of steps, the key and scale, and how a step becomes a note.
  *
  * A step stores a scale degree and an octave, not a MIDI note: change the key or the scale and every pattern follows
@@ -53,4 +54,8 @@ int32_t seq_white_index(uint32_t key);           /* key 0..26 -> 0..15 for a whi
 int32_t seq_black_index(uint32_t key);           /* key 0..26 -> 0..10 for a black key, -1 for a white one */
 void seq_rotate(seq_pat_t *p, int32_t dir);      /* by one step, right (dir > 0) or left */
 void seq_clear(seq_pat_t *p, uint32_t len);
+
+/* ideas (the ARP button): rng is the caller's random state (any nonzero value to start) */
+void seq_generate(const seq_key_t *k, seq_pat_t *p, uint32_t *rng);   /* a new 16-step bassline in the key */
+uint32_t seq_mutate(const seq_key_t *k, seq_pat_t *p, uint32_t *rng); /* vary 2..3 steps (not step 1); how many changed */
 #endif

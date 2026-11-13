@@ -1,0 +1,23 @@
+# Round sub: a triangle and a sine sub an octave down, barely filtered. Deep and soft.
+osc1_wave = 2
+osc1_level = 0.7
+sub_wave = 1
+sub_oct = 1
+sub_level = 1.0
+drive = 0.2
+cutoff = 320
+res = 0.0
+keytrack = 0.4
+fenv_amt = 0.6
+f_d = 0.3
+a_a = 0.003
+a_d = 0.6
+a_s = 1.0
+a_r = 0.12
+vel_sens = 0.3
+accent = 0.3
+glide = 0.04
+glide_mode = 1
+analog = 0.3
+sat = 0.15
+level = -5

@@ -24,8 +24,8 @@ Each has acceptance criteria (§1); a milestone is not done until its criteria a
 - **No clicks**: no discontinuities on note-on, note-off, slide, accent, or patch change at any setting
   (host-mode check for sample-to-sample jumps above the signal's own slope).
 - **Headroom**: nothing hard-clips the DAC at any setting; the output limiter is the only ceiling.
-- **Blind A/B**: the user cannot reliably tell our patch from the reference in a blind A/B on at least 3 reference
-  basslines, in a mix context. References chosen by the user (recordings of real hardware or trusted emulations).
+- **Blind A/B**: a listener cannot reliably tell our patch from the reference in a blind A/B on at least 3 reference
+  basslines, in a mix context. References chosen by the author (recordings of real hardware or trusted emulations).
 
 ### Timing
 - **Internal clock**: note onsets are sample-exact (0 samples of jitter) and do not drift. After 10 minutes at
@@ -117,7 +117,7 @@ Constraints:
 
 ### 4.3 Process for getting there
 
-1. **Reference first.** The user picks 3–5 target sounds (recordings of real hardware, or the plugin they trust most
+1. **Reference first.** Pick 3–5 target sounds (recordings of real hardware, or the plugin you trust most
    for analog bass). These are the bar we A/B against for the whole project.
 2. **Prototype on the Mac in float**, at high quality, inside the host renderer. Iterate on the sound by ear with
    fast WAV renders until it beats or matches the references.
@@ -145,7 +145,7 @@ Constraints:
   benchmark varies ±3 % with code layout). The FPU costs ~11 cycles per dependent operation and divides cost the
   same as multiplies, so the engine is bound by operation count, not by divisions or code fetch (both tried). **In
   practice**: the engine in the audio interrupt, keys and USB MIDI notes with a running 120 BPM clock: under 60 %
-  peak, no glitches (user test, 2026-11-13). Budget for the rest: the sequencer is per-sample comparisons (small).
+  peak, no glitches (listening test, 2026-11-13). Budget for the rest: the sequencer is per-sample comparisons (small).
 
 ### 4.4 Patches
 
@@ -225,11 +225,10 @@ bar line.
 
 **v2 candidates**: a **delay** (cheap in CPU; memory-bound: ~340 KB of pool RAM is ~2 s of float or ~4 s of 16-bit
 audio) and a **reverb** (costs CPU: with the engine at ~50 % it needs a small design, possibly at a lower internal
-rate). Requested by the user 2026-11-13 as "later, not v1".
+rate). Planned 2026-11-13 as "later, not v1".
 
-### 6.3 Panel map (approved 2026-11-13 from the clickable mockup)
+### 6.3 Panel map (settled 2026-11-13 from a clickable mockup)
 
-The mockup: https://claude.ai/artifact/YJ4Uc3rRvbwpnHvGmyhoAD (the screens, the control map, the step tools).
 The 27 keys run F3–G5: **16 white keys, 11 black keys**.
 
 | Control | Function |
@@ -242,10 +241,10 @@ The 27 keys run F3–G5: **16 white keys, 11 black keys**.
 | HOME | **Performance page**: env amount, decay, accent, glide. Hold: undo (again: redo) |
 | EDIT | Oscillators: wave, pulse width, osc 2 level, detune · again: osc 2 semitones, sub, sub octave, noise |
 | ENV | Filter: cutoff, resonance, env amount, keytrack · again: filter envelope · again: amp envelope |
-| LFO | LFO: rate (tempo-synced), depth, destination, shape · again: glide, glide mode, accent, velocity |
-| FX | Drive, saturation, analog, level · again: bass compensation, 24/12 dB, low cut |
+| LFO | LFO 1, LFO 2: rate (free 0.05–30 Hz, or synced 4 bars … 1/32 with dotted and triplets: the phase follows the song position), shape (sine, tri, saw down/up, square, S&H), destination (pitch, cutoff, resonance, PW, amp, drive, reverb mix), depth ±100 % · again: LFO SET (sync, retrigger on a note, per LFO) · again: glide, glide mode, accent, velocity |
+| FX | Drive, saturation, analog, level · again: bass compensation, 24/12 dB, low cut · again: REVERB: mix, decay, tone, low cut of the send |
 | SEL | Key and scale: root, scale, in-scale/chromatic keys, transpose. Hold + a key: set the root |
-| GLO | Tempo, swing, step rate, timing offset · again: MIDI channel, clock source, notes out, cutoff CC. Hold + PLAY: tap tempo |
+| GLO | Tempo, swing, step rate (1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32), timing offset · again: MIDI channel, clock source, notes out, CC (cutoff 74 / resonance 71: off, in, out, in + out) and the audio CPU · again: ABOUT (author JazzMasterT, version, build date, copyright, licence). Hold + PLAY: tap tempo |
 | SEQ | White keys = steps; STEP page (note, octave, gate, accent/slide), PATTERN page (length, rotate, transpose, swing). Hold + white key: pattern 1–16 (switches at the bar end while playing). Hold + SAVE: copy pattern |
 | REC | Stopped: step record (play notes; each fills the next step). Playing: live record into the step playing |
 | PLAY | Start / stop; with a DAW's clock, follows its Start / Stop |
@@ -253,10 +252,12 @@ The 27 keys run F3–G5: **16 white keys, 11 black keys**.
 | OCT− / OCT+ | Keyboard octave; in the sequencer, bar 1–4 |
 | White keys (playing) | Scale-locked: one scale degree per key from the root (lit keys = roots); chromatic: a normal keyboard |
 | Black keys | Scale-locked: off when playing; **when writing steps (REC, SEQ): ACC · SLIDE · TIE (the group of three), REST · BACK (the group of two)**. Chromatic: notes (accent/slide then on the STEP page's KNOB4) |
-| ARP | Spare (candidates: a fill/variation, a pattern "mutate") |
+| ARP | Ideas, in the key: tap = MUTATE (2–3 steps vary: a neighbouring note, an octave, accent, slide, a rest), hold = NEW BASSLINE (16 steps: root-heavy, syncopated, accents and slides). Hold HOME: undo |
 | Screen | Header: pattern, key/scale, tempo (INT/EXT), transport. The pattern as a pitch lane (accents, slides, ties, playhead); on sound pages a picture of the page (waveform, filter curve, envelope, drive curve, scale). An info line (patch, step, or what a control just changed). The four knob boxes. |
 
 On the device a long press is not needed: holds are real holds.
+
+MIDI in also takes **program change** (the patch, 1–32), cutoff and resonance CC, notes, clock and transport. Output: the DAC's full range (+6 dB on Dinghy's default; our limiter holds the peaks). 16 factory patches (patches/*.txt, level-matched within ~2.6 dB), 32 slots.
 
 ## 7. Development workflow
 
@@ -278,7 +279,7 @@ On the device a long press is not needed: holds are real holds.
 
 ## 9. Testing the "sounds like analog" claim honestly
 
-- Blind A/B with level-matching (a few dB louder always "sounds better"); the user listens, does not know which is
+- Blind A/B with level-matching (a few dB louder always "sounds better"); the listener does not know which is
   which.
 - In a mix as well as solo — bass is judged in context.
 - Through the real path (FM-1 headphone out → Apollo), not just host renders, before M3 is called done.

@@ -1,0 +1,17 @@
+# Pluck verb: a short pluck into a bright reverb (the low end stays dry).
+osc1_wave = 0
+drive = 0.3
+cutoff = 250
+res = 0.3
+keytrack = 0.5
+fenv_amt = 4.0
+f_d = 0.15
+a_a = 0.001
+a_d = 0.35
+a_s = 0.0
+a_r = 0.25
+verb_mix = 0.4
+verb_decay = 2.2
+verb_tone = 0.6
+verb_lowcut = 300
+level = 3
