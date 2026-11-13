@@ -107,5 +107,21 @@ for st, ln, _, _ in notes:
 ratio = step[edges].max() / step[sustain].max()
 check("note on/off step vs sustained waveform step (1.0 = no click)", ratio, 1.05, unit="x")
 
+# 4. clicks from velocity / accent on a sounding note: legato into an accent and out of it, and an accent landing
+#    on a release tail (what the FM-1's test bassline did at steps 1 and 7/8)
+acc_patch = {**CLEAN, "cutoff": 2000, "vel_sens": 0.5, "accent": 0.6, "a_r": 0.1, "drive": 0.3, "glide_mode": 0}
+seq = [(0.10, 0.30, 33, 90), (0.35, 0.20, 36, 127), (0.50, 0.10, 38, 90), (0.62, 0.20, 33, 127), (0.95, 0.2, 33, 90)]
+x = render("accents", acc_patch, seq, 1.4)
+from scipy.signal import butter, sosfilt
+hf = np.abs(sosfilt(butter(4, 8000, "highpass", fs=FS, output="sos"), x))   # a click is broadband; the note (24 dB/oct
+win = np.zeros_like(hf, dtype=bool)                                            # from 2 kHz) has next to nothing at 8 kHz+
+for st, ln, _, _ in seq[1:4]:
+    a = int(st * FS)
+    win[max(a - 44, 0):a + 220] = True
+sus = np.zeros_like(hf, dtype=bool)
+sus[int(0.2 * FS):int(0.34 * FS)] = True
+ratio = hf[win].max() / hf[sus].max()
+check("accent / velocity change on a sounding note: 8 kHz+ burst vs the sustained note", ratio, 3.0, unit="x")
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

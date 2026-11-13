@@ -64,7 +64,7 @@ int main(int argc, char **argv)
         clk_ext_poll(&c, S);
         player_block(&c, &cfg, S, block, emit, &S);
     }
-    printf("bpm %.3f\n", clk_bpm(&c));
+    printf("bpm %.3f\n", clk_tempo(&c));
     printf("fast %u jumps %u drifts\n", c.n_fast & 0xFFFFu, c.n_fast >> 16);
     free(m);
     return 0;

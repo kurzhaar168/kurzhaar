@@ -73,6 +73,7 @@ void be_patch_changed(be_t *e)
         e->hp_c = 0.0f;
     e->out_gain = be_exp2(be_clamp(p->level, -24.0f, 12.0f) / 6.0206f);
     e->sweep_c = coef(0.25f, e->fs);
+    e->sm_c = coef(0.002f, e->fs);
 }
 
 void be_init(be_t *e, float fs)
@@ -131,6 +132,11 @@ void be_note_on(be_t *e, uint8_t note, uint8_t vel)
     e->held[e->nheld++] = note;
     e->vel = (float)vel * (1.0f / 127.0f);
     e->acc = vel >= ACCENT_VEL ? e->p.accent : 0.0f;
+    if (e->ae.v < 0.001f) {                      /* from silence: the new note's level and accent at once (sharp
+                                                    attacks); while one sounds they glide (be_render: no click) */
+        e->vel_s = e->vel;
+        e->acc_s = e->acc;
+    }
     if (e->acc > 0.0f)                           /* accents pile up a little, like the 303's sweep circuit */
         e->sweep = be_clamp(e->sweep + e->acc * 0.5f, 0.0f, 1.5f);
     start_note(e, note, legato);
@@ -299,13 +305,15 @@ BE_HOT static void be_render_hot(be_t *e, float *out, uint32_t n)
         fe = env_tick(&e->fe);
         ae = env_tick(&e->ae);
         e->sweep -= e->sweep * sweep_c * 0.2f;
-        velk = 1.0f - p->vel_sens + p->vel_sens * e->vel;
+        e->vel_s += (e->vel - e->vel_s) * e->sm_c;   /* velocity and accent glide (~2 ms): stepping the level of a */
+        e->acc_s += (e->acc - e->acc_s) * e->sm_c;   /* sounding note (a release tail, a slide) would click */
+        velk = 1.0f - p->vel_sens + p->vel_sens * e->vel_s;
         fc = p->cutoff * be_exp2(p->keytrack * (e->pitch - 48.0f) * (1.0f / 12.0f)
-                                 + fe * (p->fenv_amt * velk + e->acc * 2.5f)
-                                 + e->sweep * e->acc + e->spread_cut + p->analog * 0.05f * e->drift_f);
+                                 + fe * (p->fenv_amt * velk + e->acc_s * 2.5f)
+                                 + e->sweep * e->acc_s + e->spread_cut + p->analog * 0.05f * e->drift_f);
         fc = be_clamp(fc, 8.0f, 20000.0f);
         g = be_tan(BE_PI * fc * e->inv_fs2);
-        amp = ae * (1.0f - 0.5f * p->vel_sens + 0.5f * p->vel_sens * e->vel) * (1.0f + 0.35f * e->acc)
+        amp = ae * (1.0f - 0.5f * p->vel_sens + 0.5f * p->vel_sens * e->vel_s) * (1.0f + 0.35f * e->acc_s)
               * e->out_gain * makeup;
 
         for (k = 0; k < 2u; k++) {               /* two 2x samples, each from two 4x samples */

@@ -10,7 +10,22 @@ ap.add_argument("midi", nargs="?", default="refs/midi/00_all.mid")
 ap.add_argument("--loops", type=int, default=2)
 ap.add_argument("--port", default="Felucca")
 ap.add_argument("--bpm", type=float, default=120.0)
+ap.add_argument("--clock-only", type=float, metavar="SECONDS", help="no notes: Start, clock for SECONDS, Stop")
+ap.add_argument("--bpm-to", type=float, help="with --clock-only: ramp the tempo to this by the end")
 a = ap.parse_args()
+
+if a.clock_only:                                   # a DAW's transport and clock, nothing else
+    with mido.open_output(a.port) as out:
+        out.send(mido.Message("start"))
+        t0 = time.perf_counter(); t = 0.0
+        while t < a.clock_only:
+            bpm = a.bpm if not a.bpm_to else a.bpm + (a.bpm_to - a.bpm) * t / a.clock_only
+            out.send(mido.Message("clock"))
+            t += 60.0 / bpm / 24.0
+            while time.perf_counter() - t0 < t:
+                time.sleep(0.0005)
+        out.send(mido.Message("stop"))
+    print("done"); raise SystemExit
 
 mf = mido.MidiFile(a.midi)
 events, t = [], 0.0

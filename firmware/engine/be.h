@@ -58,6 +58,7 @@ typedef struct {
     uint8_t held[8], nheld;
     float pitch, pitch_target, glide_c;          /* semitones (MIDI) */
     float vel, acc;                              /* this note's velocity 0..1, accent 0..1 */
+    float vel_s, acc_s, sm_c;                    /* the same, gliding (~2 ms), and the glide's coefficient */
     float sweep, sweep_c;                        /* accent sweep (accumulates over accents), octaves; its decay */
     /* oscillators */
     float ph1, ph2, tri1, tri2, dt1, dt2;         /* phases; phase steps (updated every 4th sample) */

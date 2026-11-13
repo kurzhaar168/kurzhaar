@@ -303,6 +303,14 @@ static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)   /* 1 (USB) or 2 (TR
     *d2 = (uint8_t)(pk >> 24);
     return pk & 0xF0u ? 2 : 1;
 }
+static int midi_get_t(uint8_t *st, uint8_t *d1, uint8_t *d2, uint32_t *t)   /* midi_get, with the arrival time
+                                                                               (fm1_ticks) of the message */
+{
+    if (mi_r == mi_w)
+        return 0;
+    *t = midi_in_t[mi_r % MQ];
+    return midi_get(st, d1, d2);
+}
 static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)   /* USB out, from the main loop only; F8 FA FB FC too */
 {
     midi_out_event((st >> 4) | st << 8 | (d1 & 0x7Fu) << 16 | (d2 & 0x7Fu) << 24);

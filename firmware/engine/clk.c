@@ -79,7 +79,7 @@ float clk_step_len(const clk_t *c)
     return c->ext ? 6.0f * c->P : (float)c->num / (float)c->den;
 }
 
-float clk_bpm(const clk_t *c)
+float clk_tempo(const clk_t *c)
 {
     return c->ext ? c->fs * 60.0f / (24.0f * c->P) : (float)c->bpm10 * 0.1f;
 }

@@ -51,5 +51,5 @@ void clk_ext_poll(clk_t *c, uint32_t now);      /* each block: a clock that stop
 /* the time of step k (when running), as an offset in samples from `from` (may be negative: late) */
 float clk_step_offset(const clk_t *c, int32_t k, uint32_t from);
 float clk_step_len(const clk_t *c);              /* the current step length in samples */
-float clk_bpm(const clk_t *c);                   /* the tempo now (internal or estimated) */
+float clk_tempo(const clk_t *c);                   /* the tempo now (internal or estimated) */
 #endif

@@ -41,6 +41,7 @@ static void um_byte(uint32_t b)
     if (b >= 0xF8u) {                              /* realtime: the state is kept; clock and transport */
         if ((b == 0xF8u || b == 0xFAu || b == 0xFBu || b == 0xFCu) && mi_w - mi_r < MQ) {
             midi_in_q[mi_w % MQ] = 0x1Fu | b << 8; /* (cable 1: from the TRS jack) */
+            MIDI_IN_STAMP();                       /* (parsed in the main loop: a later stamp than USB's) */
             RING_PUBLISH();
             mi_w++;
         }
@@ -66,6 +67,7 @@ static void um_byte(uint32_t b)
         um.got = 0;
         if (mi_w - mi_r < MQ) {
             midi_in_q[mi_w % MQ] = pkt;
+            MIDI_IN_STAMP();
             RING_PUBLISH();
             mi_w++;
             um.msgs++;

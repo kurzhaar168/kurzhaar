@@ -48,6 +48,7 @@ static int32_t sine(uint32_t ph)                /* a full cycle over 2^32 -> -32
 #ifdef DINGHY_ENGINE
 static void eng_audio(int32_t *out, uint32_t n);
 static void eng_note(uint32_t note, uint32_t vel);
+static void eng_clock_msg(uint32_t st, uint32_t d1, uint32_t d2, uint32_t t);
 #endif
 
 static void app_audio(int32_t *out, uint32_t n)
@@ -204,8 +205,16 @@ static void midi_in(void)
 {
     uint8_t st, d1, d2;
     int src;
+#ifdef DINGHY_ENGINE
+    uint32_t t_in;
+    while ((src = midi_get_t(&st, &d1, &d2, &t_in)) != 0) {   /* 1 USB, 2 the TRS jack; t_in: when it came */
+        uint32_t ty = st & 0xF0u;
+        if (st >= 0xF8u || st == 0xF2u)
+            eng_clock_msg(st, d1, d2, t_in);    /* clock and transport to the engine's clock, with their time */
+#else
     while ((src = midi_get(&st, &d1, &d2)) != 0) {   /* 1 USB, 2 the TRS jack */
         uint32_t ty = st & 0xF0u;
+#endif
         if (st == 0xF8u) {                      /* clock: 24 a quarter note */
             if (clk_n % 24u == 0u) {
                 if (clk_n) {
@@ -329,7 +338,7 @@ static void app_main(void)
         midi_in();
         if (clk_bpm && fm1_ms - clk_t0 > 2000u) clk_bpm = 0, clk_run = 0;   /* the clock has stopped coming */
 #ifdef DINGHY_ENGINE
-        eng_ui();
+        eng_ui(b);
 #endif
 
         oct = (int8_t)set.oct;

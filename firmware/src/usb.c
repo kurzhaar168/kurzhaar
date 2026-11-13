@@ -161,6 +161,14 @@ static volatile uint32_t so_w, so_r;
 #define MQ 64u
 static uint32_t midi_in_q[MQ], midi_out_q[MQ];
 static volatile uint32_t mi_w, mi_r, mo_w, mo_r;
+#ifndef FELUCCA_LOADER
+static uint32_t midi_in_t[MQ];                      /* each incoming message's arrival time (fm1_ticks, 24 MHz):
+                                                       USB is taken in the timer interrupt, so a clock tick is
+                                                       stamped within ~0.5 ms of its USB frame (midi_get_t) */
+#define MIDI_IN_STAMP() (midi_in_t[mi_w % MQ] = fm1_ticks())
+#else
+#define MIDI_IN_STAMP() ((void)0)
+#endif
 static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 {
     if (usb.config && mo_w - mo_r < MQ) {
@@ -748,6 +756,16 @@ static void midi_in_event(uint32_t pkt)
     if (cin == 0xFu && (st == 0xF8u || st == 0xFAu || st == 0xFBu || st == 0xFCu)) {   /* clock, transport */
         if (mi_w - mi_r < MQ) {
             midi_in_q[mi_w % MQ] = 0xFu | st << 8;
+            MIDI_IN_STAMP();
+            RING_PUBLISH();
+            mi_w++;
+        }
+        return;
+    }
+    if (cin == 3u && st == 0xF2u && !(pkt & 0x80800000u)) {   /* Song Position Pointer (16ths): Continue from it */
+        if (mi_w - mi_r < MQ) {
+            midi_in_q[mi_w % MQ] = pkt;
+            MIDI_IN_STAMP();
             RING_PUBLISH();
             mi_w++;
         }
@@ -757,6 +775,7 @@ static void midi_in_event(uint32_t pkt)
         (cin == 0xCu || cin == 0xDu || !(pkt & 0x80000000u))) {
         if (mi_w - mi_r < MQ) {
             midi_in_q[mi_w % MQ] = pkt;
+            MIDI_IN_STAMP();
             RING_PUBLISH();
             mi_w++;
         }

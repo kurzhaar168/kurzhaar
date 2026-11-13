@@ -46,6 +46,7 @@ DOCKER_IMAGE = os.environ.get("JIELI_DOCKER_IMAGE", "debian:bookworm-slim")
 CFLAGS = ["-Os", "-ffunction-sections", "-fno-builtin", "-Wall", "-Wno-unused-function"]   # keep -Os: with -O2 (unity
                                     # build, usb.c inside) the FM-1's USB-MIDI IN babbled on the device (OberVave, 2026-10-13)
 ENGINE_OPT = os.environ.get("DINGHY_ENGINE_OPT", "-O2")     # the bass engine's optimisation (firmware/engine)
+ENGINE_SRCS = ["be.c", "clk.c", "player.c"]                  # each its own object (unused ones: --gc-sections)
 # the checks read the disassembly: decode for the CPU the code was built for (-mcpu=r3 has FPU instructions; read
 # as the default CPU, their second halfwords look like other instructions, a "call r0" among them)
 DIS_CPU = [f for f in os.environ.get("DINGHY_DEFS", "").split() if f.startswith("-mcpu=")][-1:]
@@ -184,7 +185,8 @@ def build_app():
     # the bass engine: its own object, optimised for speed (DSP at a long FPU latency wants scheduling); the rest
     # stays -Os (with -O2 the unity build's USB-MIDI IN babbled, see CFLAGS)
     eflags = [ENGINE_OPT if f == "-Os" else f for f in flags]
-    cmds.append(("cc", *eflags, "-c", FW / "engine" / "be.c", "-o", OUT / "engine.o"))
+    for src in ENGINE_SRCS:
+        cmds.append(("cc", *eflags, "-c", FW / "engine" / src, "-o", OUT / f"engine_{Path(src).stem}.o"))
     tc_all(*cmds)
     elf = OUT / "dinghy.elf"
     ld = FW / "app.ld"
@@ -195,7 +197,7 @@ def build_app():
         ld = OUT / "app.ld"
         ld.write_text(txt.replace("LENGTH = 0x8DFBC", f"LENGTH = {APP_SLOT:#X}".replace("0X", "0x")))
     tc("pi32v2/bin/ld", "--gc-sections", "-e", "_start", "-T", ld, OUT / "crt0.o", OUT / "fm1_vec.o",
-       OUT / "fm1_isr.o", OUT / "dinghy.o", OUT / "engine.o", "-o", elf)
+       OUT / "fm1_isr.o", OUT / "dinghy.o", *[OUT / f"engine_{Path(s).stem}.o" for s in ENGINE_SRCS], "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
         (OUT / sect).unlink(missing_ok=True)
     *_, syms, dis, rt = tc_all(("common/bin/objcopy", "-O", "binary", "-j", ".text", elf, OUT / "text.bin"),
