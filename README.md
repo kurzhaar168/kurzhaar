@@ -67,12 +67,27 @@ Connect the FM-1 over USB. It appears as a MIDI port named **Kurzhaar FM-1**.
 
 - **Clock:** GLO › MIDI › CLOCK set to AUTO follows the DAW's clock and its start and stop; with no clock coming in,
   Kurzhaar runs on its own tempo.
+- **Where it starts:** a DAW that sends Song Position (Ableton Live, Logic, Bitwig, Reaper) can start anywhere,
+  even mid-bar, and Kurzhaar picks up at the matching step. **Studio One sends no Song Position**, only Start or
+  Continue, so Kurzhaar starts its pattern at step 1 when you press play: **start playback on a bar line** (grid
+  snap helps) and it lines up. In Studio One's external device, tick *Send MIDI Clock*; *Use MIDI Clock Start*
+  may be on or off (Kurzhaar treats both the same); *Send MIDI Timecode* is not used.
 - **Notes:** play Kurzhaar from the DAW on the MIDI channel set in GLO (OMNI by default). NOTES OUT sends the
   sequencer's notes back, so you can record them.
 - **Automation:** CC 74 is cutoff and CC 71 is resonance, received and/or sent (GLO › MIDI › CC).
 - **Patches:** a program change (1–32) selects the patch.
-- **Audio:** take the headphone output into your interface. To compensate for the round trip, adjust the timing
-  offset (GLO).
+- **Audio, two ways:**
+  - **Over USB:** the FM-1 is also a USB audio input, **Kurzhaar FM-1**: 16-bit stereo at 44.1 or 48 kHz, exactly
+    what the headphone output plays (after the MASTER knob). Nothing to set up. With another interface as your
+    DAW's audio device, combine the two in an aggregate device (macOS: Audio MIDI Setup).
+  - **Analog:** the headphone output into your interface's line input.
+
+  Either way, the GLO timing offset lines Kurzhaar up with the DAW's grid: record a few bars, measure how late
+  the notes land, and turn OFFSET left by that much (− plays earlier, up to 10 ms). Measure from bar 2 on: the
+  first note after Start cannot be early. In an aggregate device, tick drift correction for the FM-1, or a long
+  recording slowly slides against the grid.
+- **If the FM-1 is missing as an audio input on a Mac:** close any browser tab that talks to it (the Firmware Hub,
+  for one) and plug it in again. While a browser holds the FM-1, macOS cannot open its audio.
 
 ## Install
 

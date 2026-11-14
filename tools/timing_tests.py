@@ -4,8 +4,9 @@
 """Timing tests (docs/DESIGN.md section 1, "Timing"): the clock and player (tests/clock_test.c) against scripted
 clock streams. Exit 1 if a criterion fails.   .venv/bin/python tools/timing_tests.py [-v]
 
-Tick timestamps model the FM-1: host jitter +-0.5 ms, the next 1 ms USB frame, then up to 0.5 ms until the main
-loop timestamps it. A constant mean delay is expected (the timing offset calibrates it): jitter and drift are
+Tick timestamps model the FM-1: host jitter +-0.5 ms, the next 1 ms USB frame, then up to 0.5 ms until the 2 kHz
+USB poll stamps it, and, while the engine renders (~55 % of the time), up to one render slice (~0.2 ms) more
+(platform_midi_catchup). A constant mean delay is expected (the timing offset calibrates it): jitter and drift are
 measured around it."""
 import subprocess, sys, tempfile
 from pathlib import Path
@@ -54,7 +55,10 @@ def usb_stamp(t_true, jitter=True):
         return t_true
     t = t_true + rng.uniform(-0.5, 0.5) * MS                 # host scheduling
     t = np.ceil(t / MS) * MS                                 # the next 1 ms USB frame
-    return t + rng.uniform(0.0, 0.5) * MS                    # until the main loop reads and timestamps it
+    t += rng.uniform(0.0, 0.5) * MS                          # until the 2 kHz poll stamps it
+    if rng.uniform() < 0.55:                                 # a render is running: the poll waits for its slice
+        t += rng.uniform(0.0, 0.2) * MS
+    return t
 
 
 def ticks(tick_times, jitter=True):
@@ -163,8 +167,8 @@ for tps, name in ((8, "1/8T"), (3, "1/32"), (24, "1/4")):
     ks = np.array(sorted(steps))
     err = np.array([steps[k] for k in ks]) - (256 + ks * L)
     check(f"internal {name} at 120 BPM, 1 min: max error vs ideal grid", np.abs(err).max(), 1.0, "samples")
-true = tick_grid(lambda k: 120.0, 0.5, 24 * 2 * 30)
-steps = run([(0, "rate 12"), (0.1 * FS, "start")] + ticks(true), 30.0)
+true = tick_grid(lambda k: 120.0, 0.5, 24 * 2 * 600)          # 10 minutes, as the 1/16 test (30 s measured mostly
+steps = run([(0, "rate 12"), (0.1 * FS, "start")] + ticks(true), 600.0)   # the tracker settling, not its jitter)
 ks = np.array(sorted(k for k in steps if k >= 4 and 12 * k < len(true)))
 r = np.array([steps[k] - true[12 * k] for k in ks]) / MS
 check("external 1/8 (12 ticks a step): jitter around the tick grid (99th percentile)", np.percentile(np.abs(r - np.median(r)), 99), 0.12)

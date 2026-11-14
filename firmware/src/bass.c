@@ -90,6 +90,7 @@ static volatile int32_t play_idx = -1;           /* the step playing (index in t
 static volatile uint32_t play_gen;               /* moves on every step */
 static volatile uint32_t a_running;
 static uint32_t ppos;                            /* the pattern's position */
+static uint8_t a_spp;                            /* a Song Position came since the last transport message */
 static uint32_t off_s[4];                        /* pending note-offs: sample time, note (0 = free) */
 static uint8_t off_n[4];
 static uint8_t seq_note_on;                      /* the sequencer's sounding note (0 = none), its off slot */
@@ -181,6 +182,7 @@ static void a_emit(void *ctx, uint32_t offset, int32_t step)
     if (a_nev < 8u) { a_ev[a_nev].off = offset; a_ev[a_nev].step = step; a_nev++; }
 }
 
+#define RSLICE 16u                               /* the render's slice (samples, 0.36 ms): MIDI is fetched between slices */
 static void app_audio(int32_t *out, uint32_t n)
 {
     uint32_t t0 = fm1_ticks(), i, pos, e, k, dt;
@@ -217,11 +219,16 @@ static void app_audio(int32_t *out, uint32_t n)
         if (st >= 0xF2u && glo.clock == 1u) continue;          /* internal only: ignore the DAW */
         switch (st) {
         case 0xF8u: clk_ext_tick(&clk, aS + (uint32_t)oi, off - (float)oi); break;
-        case 0xFAu: a_all_off(); clk_ext_start(&clk); ppos = 0; break;
-        case 0xFBu: clk_ext_continue(&clk); break;
-        case 0xFCu: clk_ext_stop(&clk); a_all_off(); break;
+        case 0xFAu: a_all_off(); clk_ext_start(&clk); ppos = 0; a_spp = 0; break;
+        case 0xFBu:                              /* Continue: from the Song Position just sent; without one (Studio
+                                                    One never sends it) from the start, as a Start */
+            if (a_spp) clk_ext_continue(&clk);
+            else { a_all_off(); clk_ext_start(&clk); ppos = 0; }
+            a_spp = 0;
+            break;
+        case 0xFCu: clk_ext_stop(&clk); a_all_off(); a_spp = 0; break;
         case 0xF2u: clk_ext_spp(&clk, ((m >> 8) & 127u) | ((m >> 16) & 127u) << 7);
-                    ppos = (((m >> 8) & 127u) | ((m >> 16) & 127u) << 7); break;
+                    ppos = (uint32_t)clk.step; a_spp = 1; break;   /* (the pattern's position in steps of the rate) */
         case CMD_PLAY: if (glo.clock != 2u && !(clk.ext && clk.have_ref)) { ppos = 0; clk_play(&clk, aS); } break;
         case CMD_HALT: if (!(clk.ext && clk.have_ref)) { clk_stop(&clk); a_all_off(); } break;
         default: break;
@@ -251,7 +258,13 @@ static void app_audio(int32_t *out, uint32_t n)
                 if (oo < next) { next = oo; which = k; }
             }
         if (e < a_nev && a_ev[e].off < next) { next = a_ev[e].off; which = 0x80u; }   /* offs first at a tie */
-        if (next > pos) { be_render(&eng, rbuf + pos, next - pos); pos = next; }
+        while (pos < next) {                     /* in slices of <= 0.36 ms, MIDI fetched between them: a clock tick
+                                                    is stamped on arrival, not after the render (platform.c) */
+            uint32_t m = next - pos > RSLICE ? RSLICE : next - pos;
+            be_render(&eng, rbuf + pos, m);
+            pos += m;
+            platform_midi_catchup();
+        }
         if (which == 0xFFu) break;
         if (which == 0x80u) { a_play_step(aS + a_ev[e].off); e++; }
         else {
@@ -267,7 +280,10 @@ static void app_audio(int32_t *out, uint32_t n)
     }
     if (verb.cfg.mix > 0.001f) {                 /* the reverb: stereo around the dry bass */
         for (i = 0; i < n; i++) sbuf[2u * i] = sbuf[2u * i + 1u] = rbuf[i];
-        verb_process(&verb, rbuf, sbuf, n);
+        for (i = 0; i < n; i += RSLICE) {        /* (in slices too) */
+            verb_process(&verb, rbuf + i, sbuf + 2u * i, n - i > RSLICE ? RSLICE : n - i);
+            platform_midi_catchup();
+        }
         for (i = 0; i < 2u * n; i++) {
             float x = sbuf[i];
             out[i] = (int32_t)((x > 0.999f ? 0.999f : x < -0.999f ? -0.999f : x) * 32767.0f);
@@ -547,7 +563,7 @@ static void prm_turn(uint32_t id, int32_t d)
         else *r = be_clamp(*r * be_exp2(0.125f * (float)d), 0.05f, 30.0f);
         patch_touched();
     } break;
-    case A_OFFSET: { int32_t o = glo.offset10 + d * 5; glo.offset10 = (int8_t)(o < -100 ? -100 : o > 100 ? 100 : o); } break;
+    case A_OFFSET: { int32_t o = glo.offset10 - d * 5; glo.offset10 = (int8_t)(o < -100 ? -100 : o > 100 ? 100 : o); } break;   /* left: earlier (shown -), right: later (+) */
     case A_MIDICH: { int32_t c = (int32_t)glo.midi_ch + d; glo.midi_ch = (uint8_t)(c < 0 ? 0 : c > 16 ? 16 : c); } break;
     case A_CLOCK: { int32_t c = (int32_t)glo.clock + d; glo.clock = (uint8_t)(c < 0 ? 0 : c > 2 ? 2 : c); dirty |= D_HDR; } break;
     case A_NOTESOUT: glo.notes_out = d > 0; break;
@@ -669,10 +685,14 @@ static void draw_header(void)
     p = s_cat(b, NOTE_N[key.root % 12u]); p = s_cat(p, " "); s_cat(p, key.chromatic ? "CHROM" : SCALE_SHORT[key.scale % seq_nscales]);
     cv_text(120 - text_w(&FONT_S, b) / 2, 1, &FONT_S, b, K_TEXT);
     {
+        static float shown;                      /* the DAW's tempo as shown, to 0.1: it moves once the estimate is
+                                                    clearly nearer another tenth (0.07 away), so a steady clock shows
+                                                    one steady number and the right one */
         float bpm = clk_tempo(&clk);
         int ext = clk.ext && clk.have_ref;
+        if (bpm - shown > 0.07f || shown - bpm > 0.07f) shown = (float)(int32_t)(bpm * 10.0f + 0.5f) * 0.1f;
         p = b; if (ext) p = s_cat(p, "E");
-        s_fix1(p, ext ? bpm : (float)glo.bpm10 * 0.1f);
+        s_fix1(p, ext ? shown : (float)glo.bpm10 * 0.1f);
         cv_text(222 - text_w(&FONT_S, b), 1, &FONT_S, b, ext ? K_CYAN : K_TEXT);
     }
     if (ui.rec) { cv_rect(227, 4, 9, 9, K_CORAL); }

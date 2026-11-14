@@ -73,6 +73,11 @@ MODELS = {"pro": "SMK-37 Pro", "elite": "SMK-37 Elite", "mke": "MKE-P37"}   # sm
 DATA_FAMILY = "DINGHY"              # the SMK store's owner tag (store.h): 1..7 of A-Z 0-9. Your fork: your own
 SCREEN_NAME = os.environ.get("DINGHY_SCREEN_NAME", "KURZHAAR" if KURZHAAR else "DINGHY")
                                     # the update loader's screen (FM-1, ldr_screen.c): the name and its colour (RGB565)
+_LDR_CH = re.search(r'LDR_CH\[\] = "([^"]*)"', (Path(__file__).resolve().parent.parent / "firmware" / "loader"
+                    / "ldr_screen.c").read_text())[1]
+if any(ch != " " and ch not in _LDR_CH for ch in SCREEN_NAME):   # the update screen's font: a missing letter is a gap
+    raise SystemExit(f"SCREEN_NAME {SCREEN_NAME!r}: the update screen has no {sorted(set(SCREEN_NAME) - set(_LDR_CH) - {' '})}"
+                     " (firmware/loader/ldr_screen.c LDR_FONT)")
 SCREEN_COLOUR = 0xFDA8 if KURZHAAR else 0xB47F   # Kurzhaar: amber #FFB547; Dinghy: lilac
 PRODUCT = BOARD_PREFIX["fm1"] + "0" # Kurzhaar: 94N, Dinghy: 99N (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
 VERSION = None                      # APP_VER for release builds

@@ -21,9 +21,15 @@ complete source under the same licence too.
 Kurzhaar is a modified version of Dinghy (<https://github.com/zvenson/dinghy>, forked at its `main` of 2026-11-13).
 The files Kurzhaar changed carry a line *Modified by JazzMasterT, 2026-11* saying what changed; the git history has
 every change in detail. Changed: `firmware/src/dinghy.c`, `gfx.c`, `midi_uart.c`, `platform.c`, `usb.c`,
-`tests/host.c`, `run_host.sh`, `run_tests.sh`, `tools/build.py`, `.github/workflows/release.yml`,
+`tests/host.c`, `run_host.sh`, `run_tests.sh`, `tools/build.py`, `firmware/loader/ldr_screen.c`,
+`.github/workflows/release.yml`,
 `docs/MAKE-IT-YOURS.md`; Dinghy's README is `docs/DINGHY.md`; Dinghy's logo is removed. Everything else from
 Dinghy is unchanged.
+
+USB audio on macOS 15 and earlier (`firmware/src/usb.c`, `FELUCCA_UAC_MIDI_LAST`): the audio streaming interface
+right after audio control and MIDI last, as found in [Felucca issue #67](https://github.com/hugelton/Felucca/issues/67)
+and its fix, [PR #322](https://github.com/hugelton/Felucca/pull/322) by dhilowitz (after felucca-bsp's
+`FELUCCA_UAC_MIDI_LAST`), GPL-3.0.
 
 ## Third-party material
 

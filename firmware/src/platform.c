@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Modified by JazzMasterT, 2026-11: the app sets the output level (FM1_OUT_SHIFT); host-mode stand-ins. */
+/* Modified by JazzMasterT, 2026-11: the app sets the output level (FM1_OUT_SHIFT); host-mode stand-ins;
+ * platform_midi_catchup (MIDI stamped on time during a render). */
 /* Dinghy's platform: everything an FM-1 (or SMK-37) firmware needs before it can be fun, taken unchanged from
  * SLOOP / Felucca / sloopDX / OberVave and wired up here. You should not need to touch this file.
  *
@@ -320,9 +321,13 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)   /* USB out, from 
 /* ---- the timer: 10 kHz key scan, milliseconds, USB at 2 kHz. It outranks the audio ISR; nested in a
  * render it only scans, counts and feeds the USB audio stream (as sloopDX main.c) */
 static volatile uint8_t in_audio;
+static volatile uint32_t t5_owed;               /* polls the timer owes: 1 USB, 2 the TRS jack (nested in a render, the
+                                                   USB audio build leaves them to the next tick out of it, or to
+                                                   platform_midi_catchup) */
 void fm1_timer5_irq(void)
 {
-    static uint32_t sub, owed, last, acc;
+    static uint32_t sub, last, acc;
+#define owed t5_owed
     uint32_t t0 = fm1_ticks(), usb_due = sub % 5u == 0u;
     fm1_timer5_ack();
     fm1_input_tick();
@@ -364,7 +369,33 @@ void fm1_timer5_irq(void)
 #endif
     owed = 0;
 }
+#undef owed
 extern void isr_timer5(void);
+
+/* MIDI on time while the app renders (Modified by JazzMasterT, 2026-11). With USB audio the timer leaves the USB
+ * poll out while a render runs (the poll and the audio stream share the SIE's INDEX), so a MIDI message that
+ * arrives then waits for the render's end: up to ~3 ms late with a heavy engine, and its arrival stamp with it
+ * (a MIDI clock looks jittery by that much). An app that renders in slices calls this between them: an owed poll
+ * runs here, interrupts off for its few tens of us (nothing else touches the SIE meanwhile), so each message is
+ * stamped within a slice of its arrival. */
+static void platform_midi_catchup(void)
+{
+#if FELUCCA_UAC
+    uint32_t o;
+    if (!t5_owed)
+        return;
+    fm1_irq_off();
+    o = t5_owed;
+    t5_owed = 0;
+    if (o & 1u)
+        usb_poll();
+#if FELUCCA_UART
+    if (o & 2u)
+        uart_midi_poll();
+#endif
+    fm1_irq_on();
+#endif
+}
 
 /* ---- the sound: ALNK0 I2S, two halves; the app renders, the MASTER knob scales, Q15 -> 24 bit (-6 dBFS ceiling;
  * FM1_OUT_SHIFT 8: the full range, for an app that limits its own peaks: the FM-1's output is clean up to -1 dBFS) */

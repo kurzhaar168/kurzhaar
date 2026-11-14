@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
- * Modified by JazzMasterT, 2026-11: the app may set the USB maker and product names (APP_USB_MANUFACTURER, APP_USB_PRODUCT). */
+ * Modified by JazzMasterT, 2026-11: the app may set the USB maker and product names (APP_USB_MANUFACTURER, APP_USB_PRODUCT);
+ * MIDI last: audio streaming interface 1, MIDI 2 (FELUCCA_UAC_MIDI_LAST, the macOS 15 fix of Felucca #67 / PR #322);
+ * the audio ring's band set for 256-frame renders (it was set for 128: ~1.7 % of the frames sent were repeats). */
 /* USB full-speed device on USB0: a class-compliant USB-MIDI interface.
  * All SIE traffic happens in usb_poll(), called from the TIMER5 ISR at 2 kHz,
  * so INDEX is never shared and no USB IRQ is needed. MIDI in goes to a ring
@@ -30,9 +32,14 @@
 #ifndef FELUCCA_UAC_48K
 #define FELUCCA_UAC_48K 1
 #endif
+#ifndef FELUCCA_UAC_MIDI_LAST
+#define FELUCCA_UAC_MIDI_LAST 1         /* (after Felucca #67 / PR #322: see the descriptors below) */
+#endif
 #if !FELUCCA_UAC
 #undef FELUCCA_UAC_48K
 #define FELUCCA_UAC_48K 0
+#undef FELUCCA_UAC_MIDI_LAST
+#define FELUCCA_UAC_MIDI_LAST 0
 #endif
 enum { S_FADDR = 0, S_POWER = 1, S_INTRTX1 = 2, S_INTRTX2 = 3, S_INTRRX1 = 4, S_INTRRX2 = 5, S_INTRUSB = 6,
        S_INTRTX1E = 7, S_INTRTX2E = 8, S_INTRRX1E = 9, S_INTRRX2E = 10, S_INTRUSBE = 11, S_FRAME1 = 12,
@@ -67,22 +74,25 @@ static struct {
 /* USB audio input. The I2S clock is not locked to USB (about 44,117.6 Hz against the host's 44,100):
  * the endpoint is asynchronous, so each 1 ms packet carries what the ring holds, 44 or 45 frames
  * (the 44.1 pattern) and one more or one fewer while the ring's fill drifts out of its band.
- * The render writes HALF_FRAMES (128) frames every 2.9 ms; the fill measured when a render starts is
- * the low point of that saw tooth, and is kept in UA_LO..UA_HI. A frame waits in the ring for that fill
- * plus its place in the render: 80..256 frames, ~3.8 ms on average (256-frame halves and a 96..160
- * band: ~5.8 ms). Measured under load (65 % CPU): a 64..112 band started renders at
- * 48..119 with no glitch; one render was once seen 29 frames under the floor: a packet (46) must
- * still be in hand then. */
-#define UA_N 512u                /* ring, frames (16-bit L | R << 16); a power of two */
-#define UA_PRIME 104u            /* silence ahead of the first rendered frame */
-#define UA_LO 80u                /* a render may start late: keep a packet and more in hand */
-#define UA_HI 128u
+ * The render writes HALF_FRAMES (256) frames every 5.8 ms, at its end; the fill measured when a render starts
+ * is the low point of that saw tooth, and is kept in UA_LO..UA_HI. The packets the host takes while a render
+ * runs (up to ~3.5 ms of it, with the TIMER5 work nested in it) come from that fill: 176 frames (4.0 ms) at
+ * least. A smaller band (80..128, set for 128-frame renders) ran dry in long renders: the packet was padded
+ * with repeats, the fill then looked high, and ~1.7 % of the frames sent were repeats (recordings flat by
+ * ~30 cents, sliding late). Measured with this band (bench tone, 48 kHz, sequencer playing): 48,022 frames
+ * a second (the I2S rate x 160 / 147: 48,019), no repeat or loss in 20 s. A frame waits in the ring for the
+ * fill plus its place in the render: ~5-10 ms. */
+#define UA_N 1024u                /* ring, frames (16-bit L | R << 16); a power of two */
+#define UA_PRIME 202u            /* silence ahead of the first rendered frame */
+#define UA_LO 176u                /* a render may start late: keep a packet and more in hand */
+#define UA_HI 228u
 #define UAC_RATE 44100u
+_Static_assert(HALF_FRAMES == 256u, "the band (UA_LO..UA_HI) is set for 256-frame renders");
 #if FELUCCA_UAC_48K
-/* 48 kHz: the same times in 48 kHz frames (x 160 / 147); a render of HALF_FRAMES gives 139..140 frames */
-#define UA_PRIME48 113u
-#define UA_LO48 87u
-#define UA_HI48 139u
+/* 48 kHz: the same times in 48 kHz frames (x 160 / 147); a render of HALF_FRAMES gives 278..279 frames */
+#define UA_PRIME48 220u
+#define UA_LO48 192u
+#define UA_HI48 248u
 #define UA_REND48 ((HALF_FRAMES * 160u + 146u) / 147u)
 #define UA_MAXF 49u              /* frames in the largest packet: 48 + 1 */
 _Static_assert(UA_HI48 + UA_REND48 + UA_MAXF < UA_N, "the ring holds the band, a render and a packet (48 kHz)");
@@ -180,16 +190,47 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 }
 
 /* ------------------------------------------------------- descriptors --- */
-/* interfaces: 0 audio control, 1 MIDI streaming, 2 audio streaming (FELUCCA_UAC), then CDC's two.
- * bcdDevice: 3.00 MIDI, +0.01 CDC, +0.10 the audio input, +0.20 more with 48 kHz (2.5) (hosts cache descriptors
- * per version) */
+/* interfaces: 0 audio control, 1 MIDI streaming, 2 audio streaming (FELUCCA_UAC), then CDC's two; with
+ * FELUCCA_UAC_MIDI_LAST (the default with FELUCCA_UAC): 0 audio control, 1 audio streaming, 2 MIDI streaming.
+ * Why MIDI last (Felucca #67, the fix of PR #322 by dhilowitz, after felucca-bsp's FELUCCA_UAC_MIDI_LAST): the USB
+ * audio driver of macOS up to 15 drops a MIDI streaming interface from the AC collection while it walks it and
+ * gives up before the audio streaming interface when MIDI comes first: no audio input (MIDI still works). With
+ * the audio streaming interface right after audio control, MIDI last (in the collection too, for Linux), the FM-1
+ * appears as a 2-channel input on macOS 15. The class spec gives the order no meaning; the endpoints never move.
+ * bcdDevice: 3.00 MIDI, +0.01 CDC, +0.10 the audio input, +0.20 more with 48 kHz (2.5), +0.80 MIDI last (hosts
+ * cache descriptors per version) */
+#define BCD_ML (0x80 * FELUCCA_UAC_MIDI_LAST)
 #define CDC_IF (2 + FELUCCA_UAC)
-#define UAC_AS_IF 2u
+#define UAC_AS_IF (FELUCCA_UAC_MIDI_LAST ? 1u : 2u)
+#define MIDI_IF (FELUCCA_UAC_MIDI_LAST ? 2u : 1u)
 #define CFG_LEN (101 + 74 * FELUCCA_CDC + 74 * FELUCCA_UAC + 3 * FELUCCA_UAC_48K)
 #define USB_NIF (2 + FELUCCA_UAC + 2 * FELUCCA_CDC)
+#define D_MIDI                                                                                       \
+    9, 4, MIDI_IF, 0, 2, 1, 3, 0, 0,                                                                 \
+    7, 0x24, 1, 0x00, 0x01, 0x41, 0x00,                                                              \
+    6, 0x24, 2, 1, 1, 0,                                                                             \
+    6, 0x24, 2, 2, 2, 0,                                                                             \
+    9, 0x24, 3, 1, 3, 1, 2, 1, 0,                                                                    \
+    9, 0x24, 3, 2, 4, 1, 1, 1, 0,                                                                    \
+    9, 5, 0x01, 2, 64, 0, 0, 0, 0,                                                                   \
+    5, 0x25, 1, 1, 1,                                                                                \
+    9, 5, 0x81, 2, 64, 0, 0, 0, 0,                                                                   \
+    5, 0x25, 1, 1, 3,
+#if FELUCCA_UAC_48K
+#define D_FMT 14, 0x24, 2, 1, 2, 2, 16, 2, 0x44, 0xAC, 0x00, 0x80, 0xBB, 0x00,   /* type I: 2 ch, 16 bit, 44100 / 48000 */
+#else
+#define D_FMT 11, 0x24, 2, 1, 2, 2, 16, 1, UAC_RATE & 0xFF, (UAC_RATE >> 8) & 0xFF, UAC_RATE >> 16,
+#endif
+#define D_AS                                                                                         \
+    9, 4, UAC_AS_IF, 0, 0, 1, 2, 0, 0,                  /* audio streaming, alt 0: no bandwidth */   \
+    9, 4, UAC_AS_IF, 1, 1, 1, 2, 0, 0,                  /* alt 1: the stream */                      \
+    7, 0x24, 1, 2, 1, 0x01, 0x00,                       /* AS general: terminal 2, delay 1, PCM */   \
+    D_FMT                                                                                            \
+    9, 5, 0x84, 0x05, UAC_MAXP & 0xFF, UAC_MAXP >> 8, 1, 0, 0,   /* EP4 IN isochronous async, 1 ms */ \
+    7, 0x25, 1, 0x01, 0, 0, 0,                          /* CS endpoint: sampling frequency control */
 #if FELUCCA_CDC
 static const uint8_t DEV_DESC[18] = {18, 1, 0x00, 0x02, 0xEF, 0x02, 0x01, 64, 0x09, 0x12, 0x01, 0x00,
-                                     0x01 + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K), 0x03, 1, 2, 0, 1};   /* misc/IAD */
+                                     0x01 + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K) + BCD_ML, 0x03, 1, 2, 0, 1};   /* misc/IAD */
 static const uint8_t CFG_DESC[] = {
     9, 2, CFG_LEN & 0xFF, CFG_LEN >> 8, USB_NIF, 1, 0, 0x80, 50,
     8, 0x0B, 0, 2 + FELUCCA_UAC, 1, 1, 0, 0,            /* IAD: audio + MIDI (IF 0-1, 0-2) */
@@ -198,41 +239,30 @@ static const uint8_t CFG_DESC[] = {
 #define FELUCCA_USB_PID 0x0001   /* the update loader is 0x0002 */
 #endif
 static const uint8_t DEV_DESC[18] = {18, 1, 0x10, 0x01, 0, 0, 0, 64, 0x09, 0x12, FELUCCA_USB_PID & 0xFF,
-                                     FELUCCA_USB_PID >> 8, 0x00 + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K), 0x03,
+                                     FELUCCA_USB_PID >> 8, 0x00 + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K) + BCD_ML, 0x03,
                                      1, 2, 0, 1};
 static const uint8_t CFG_DESC[] = {
     9, 2, CFG_LEN & 0xFF, CFG_LEN >> 8, USB_NIF, 1, 0, 0x80, 50,
 #endif
     9, 4, 0, 0, 0, 1, 1, 0, 0,
 #if FELUCCA_UAC
-    10, 0x24, 1, 0x00, 0x01, 31, 0, 2, 1, UAC_AS_IF,    /* AC header 1.00: MIDI + audio streaming */
+#if FELUCCA_UAC_MIDI_LAST
+    10, 0x24, 1, 0x00, 0x01, 31, 0, 2, UAC_AS_IF, MIDI_IF,   /* AC header 1.00: audio + MIDI streaming */
+#else
+    10, 0x24, 1, 0x00, 0x01, 31, 0, 2, MIDI_IF, UAC_AS_IF,   /* AC header 1.00: MIDI + audio streaming */
+#endif
     12, 0x24, 2, 1, 0x03, 0x06, 0, 2, 0x03, 0x00, 0, 0, /* input terminal 1: line, 2 ch (L R) */
     9, 0x24, 3, 2, 0x01, 0x01, 0, 1, 0,                 /* output terminal 2: USB streaming, from 1 */
+#if FELUCCA_UAC_MIDI_LAST
+    D_AS
+    D_MIDI
+#else
+    D_MIDI
+    D_AS
+#endif
 #else
     9, 0x24, 1, 0x00, 0x01, 9, 0, 1, 1,
-#endif
-    9, 4, 1, 0, 2, 1, 3, 0, 0,
-    7, 0x24, 1, 0x00, 0x01, 0x41, 0x00,
-    6, 0x24, 2, 1, 1, 0,
-    6, 0x24, 2, 2, 2, 0,
-    9, 0x24, 3, 1, 3, 1, 2, 1, 0,
-    9, 0x24, 3, 2, 4, 1, 1, 1, 0,
-    9, 5, 0x01, 2, 64, 0, 0, 0, 0,
-    5, 0x25, 1, 1, 1,
-    9, 5, 0x81, 2, 64, 0, 0, 0, 0,
-    5, 0x25, 1, 1, 3,
-#if FELUCCA_UAC
-    9, 4, UAC_AS_IF, 0, 0, 1, 2, 0, 0,                  /* IF2 audio streaming, alt 0: no bandwidth */
-    9, 4, UAC_AS_IF, 1, 1, 1, 2, 0, 0,                  /* alt 1: the stream */
-    7, 0x24, 1, 2, 1, 0x01, 0x00,                       /* AS general: terminal 2, delay 1, PCM */
-#if FELUCCA_UAC_48K
-    14, 0x24, 2, 1, 2, 2, 16, 2, 0x44, 0xAC, 0x00, 0x80, 0xBB, 0x00,   /* type I: 2 ch, 16 bit, 44100 / 48000 */
-#else
-    11, 0x24, 2, 1, 2, 2, 16, 1, UAC_RATE & 0xFF, (UAC_RATE >> 8) & 0xFF, UAC_RATE >> 16,
-                                                        /* type I: 2 ch, 16 bit, one rate */
-#endif
-    9, 5, 0x84, 0x05, UAC_MAXP & 0xFF, UAC_MAXP >> 8, 1, 0, 0,   /* EP4 IN isochronous async, 1 ms */
-    7, 0x25, 1, 0x01, 0, 0, 0,                          /* CS endpoint: sampling frequency control */
+    D_MIDI
 #endif
 #if FELUCCA_CDC
     8, 0x0B, CDC_IF, 2, 2, 2, 1, 0,                     /* IAD: CDC ACM (IF 2-3, 3-4) */
@@ -257,7 +287,7 @@ typedef char cfg_len_ok[sizeof CFG_DESC == CFG_LEN ? 1 : -1];
  * are loaded first), so the host sees one device from the start */
 static uint8_t usb_cdc_on;
 static const uint8_t DEV_DESC_PLAIN[18] = {18, 1, 0x10, 0x01, 0, 0, 0, 64, 0x09, 0x12, 0x01, 0x00,
-                                           0x00 + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K), 0x03, 1, 2, 0, 1};
+                                           0x00 + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K) + BCD_ML, 0x03, 1, 2, 0, 1};
 #define CFG_PLAIN_LEN (CFG_LEN - 74)                    /* without the audio IAD (8) and the CDC block (66) */
 static uint8_t cfg_plain[CFG_PLAIN_LEN];
 static const uint8_t *cfg_plain_get(void)

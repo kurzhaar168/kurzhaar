@@ -187,7 +187,7 @@ changes *what* will play.
 The audio leaves the FM-1 about one audio buffer late and passes the Apollo's input path. One-time calibration:
 play a click pattern, measure the offset in the recorded track, then either
 - set the **audio track's delay** in Studio One (a negative delay; exact from the very first note, recommended), or
-- set the FM-1's **timing offset** (−20 … +20 ms): it plays early using the PLL's prediction. Good for live
+- set the FM-1's **timing offset** (−10 … +10 ms, knob left = earlier): it plays early using the PLL's prediction. Good for live
   monitoring, but cannot move the very first note after Start earlier than the Start message itself.
 
 ### 5.5 Verification (host mode)
@@ -226,6 +226,12 @@ bar line.
 **v2 candidates**: a **delay** (cheap in CPU; memory-bound: ~340 KB of pool RAM is ~2 s of float or ~4 s of 16-bit
 audio) and a **reverb** (costs CPU: with the engine at ~50 % it needs a small design, possibly at a lower internal
 rate). Planned 2026-11-13 as "later, not v1".
+
+**Later: the song position from MIDI timecode** (2026-11-14). Studio One sends no Song Position Pointer (measured:
+only Start or Continue, then the clock), so a start mid-bar cannot be followed and Kurzhaar starts at step 1 (the
+README says: start on a bar line). With MTC, the position is time x tempo from the song's start: right for one
+tempo and a timecode starting at bar 1, wrong across tempo changes or an offset; an option (GLO > CLOCK), not the
+default.
 
 ### 6.3 Panel map (settled 2026-11-13 from a clickable mockup)
 
