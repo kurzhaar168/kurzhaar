@@ -59,7 +59,7 @@ and [Felucca](https://github.com/hugelton/Felucca). GPL-3.0.
 | ARP | Tap: mutate the pattern. Hold: a new bassline |
 | Black keys | While writing steps: ACC · SLIDE · TIE and REST · BACK |
 
-The full map is in [docs/DESIGN.md](docs/DESIGN.md#63-panel-map-settled-2026-11-13-from-a-clickable-mockup).
+**The manual: [docs/MANUAL.md](docs/MANUAL.md)**, every page, button and setting.
 
 ## With a DAW
 
