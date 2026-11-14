@@ -315,7 +315,13 @@ static int midi_get_t(uint8_t *st, uint8_t *d1, uint8_t *d2, uint32_t *t)   /* m
 }
 static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)   /* USB out, from the main loop only; F8 FA FB FC too */
 {
+#ifdef APP_MIDI_OUT_TICK
+    fm1_irq_off();                              /* the USB poll writes the same ring (the app's timed notes) */
+#endif
     midi_out_event((st >> 4) | st << 8 | (d1 & 0x7Fu) << 16 | (d2 & 0x7Fu) << 24);
+#ifdef APP_MIDI_OUT_TICK
+    fm1_irq_on();
+#endif
 }
 
 /* ---- the timer: 10 kHz key scan, milliseconds, USB at 2 kHz. It outranks the audio ISR; nested in a

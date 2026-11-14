@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Modified by JazzMasterT, 2026-11: fm1_ticks and midi_get_t stand-ins for the clock. */
+/* Modified by JazzMasterT, 2026-11: fm1_ticks and midi_get_t stand-ins for the clock; platform_midi_catchup;
+ * midi_out_event and the app's timed MIDI out (APP_MIDI_OUT_TICK) each millisecond. */
 /* A fake FM-1 (or SMK-37) on a computer: the app (firmware/src/dinghy.c) runs unchanged on it. platform.c includes
  * this file instead of the hardware when DINGHY_HOST is set. A script presses keys over time; out come
  * the screen (PPM, at the times SHOT asks) and the sound (WAV, as the FM-1 sends it over USB).
@@ -142,6 +143,7 @@ static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)
     return src;
 }
 static void midi_send(uint32_t st, uint32_t d1, uint32_t d2) { printf("%6u ms  MIDI out %02X %u %u\n", fm1_ms, st, d1, d2); }
+static void midi_out_event(uint32_t pkt) { midi_send((pkt >> 8) & 0xFFu, (pkt >> 16) & 0x7Fu, pkt >> 24); }   /* (a USB-MIDI event) */
 #define FM1_TICKS_PER_US 24u
 static uint32_t fm1_ticks(void) { return fm1_ms * 24000u; }   /* the 24 MHz counter, at the host's millisecond */
 static int midi_get_t(uint8_t *st, uint8_t *d1, uint8_t *d2, uint32_t *t) { *t = fm1_ticks(); return midi_get(st, d1, d2); }
@@ -357,6 +359,9 @@ static void platform_poll(void)                 /* one call = one millisecond */
         }
         wav_n += HALF_FRAMES;
     }
+#ifdef APP_MIDI_OUT_TICK
+    APP_MIDI_OUT_TICK();                        /* (the USB poll's turn: the app's timed MIDI out) */
+#endif
     if (frame_fps) {                            /* a film: a frame every 1/fps s, as the screen is then, and a log line:
                                                    keys held, key LEDs, button LEDs, the 7 encoder positions */
         if ((uint64_t)frame * 1000u <= (uint64_t)fm1_ms * frame_fps) {

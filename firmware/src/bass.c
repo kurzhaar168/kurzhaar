@@ -19,6 +19,8 @@ static void app_idle(void);
 #define APP_USB_PRODUCT "Kurzhaar FM-1"             /* USB: the MIDI port's name (the update loader keeps its own) */
 #define FM1_OUT_SHIFT 8                          /* the DAC's full range: +6 dB on Dinghy (our limiter holds the peaks
                                                     below full scale; the output was measured clean to -1 dBFS) */
+static void notes_out_tick(void);
+#define APP_MIDI_OUT_TICK notes_out_tick       /* the sequencer's notes out, from the 2 kHz USB poll */
 #define FM1_USB_PRE_MASTER 1                     /* USB audio at a fixed level: MASTER is the speaker's */
 #include "platform.c"
 #ifdef DINGHY_HOST
@@ -97,7 +99,7 @@ static uint32_t cq[CQ], cq_t[CQ];
 static volatile uint32_t cq_w, cq_r;
 enum { CMD_PLAY = 0x01u, CMD_HALT = 0x02u };
 #define OQ 64u                                   /* to the main loop: MIDI out */
-static uint32_t oq[OQ];
+static uint32_t oq[OQ], oq_t[OQ];               /* (oq_t: the fm1_ticks when the note sounds: sent then) */
 static volatile uint32_t oq_w, oq_r;
 
 static volatile int32_t play_idx = -1;           /* the step playing (index in the pattern) */
@@ -136,20 +138,32 @@ static void clock_msg(uint32_t m, uint32_t t)                 /* main loop */
     cq_t[w & (CQ - 1u)] = t;
     cq_w = w + 1u;
 }
-static void out_q(uint32_t st, uint32_t d1, uint32_t d2)      /* the interrupt */
+static void out_q(uint32_t st, uint32_t d1, uint32_t d2, uint32_t s)   /* the interrupt: a note at sample s */
 {
     uint32_t w = oq_w;
+    float o = (float)(HALF_FRAMES + (int32_t)(s - aS));          /* the DAC plays this block after the half playing now */
     if (!glo.notes_out || w - oq_r >= OQ) return;
     oq[w & (OQ - 1u)] = st | d1 << 8 | d2 << 16;
+    oq_t[w & (OQ - 1u)] = aT + (uint32_t)(o > 0.0f ? o / a_r : 0.0f);   /* when it sounds: the notes go out with the
+                                                    audio, not when the block is computed (up to a block early) */
     oq_w = w + 1u;
 }
 static uint32_t out_ch(void) { return glo.midi_ch ? glo.midi_ch - 1u : 0u; }
+static void notes_out_tick(void)                 /* TIMER5 (the USB poll, 2 kHz): each queued note when it sounds */
+{
+    uint32_t now = fm1_ticks();
+    while (oq_r != oq_w && (int32_t)(now - oq_t[oq_r & (OQ - 1u)]) >= 0) {
+        uint32_t m = oq[oq_r & (OQ - 1u)], st = m & 0xFFu;
+        oq_r++;
+        midi_out_event((st >> 4) | st << 8 | ((m >> 8) & 0x7Fu) << 16 | ((m >> 16) & 0x7Fu) << 24);
+    }
+}
 
 static void a_all_off(void)
 {
     uint32_t k;
     for (k = 0; k < 4u; k++)
-        if (off_n[k]) { out_q(0x80u | out_ch(), off_n[k], 0); off_n[k] = 0; }
+        if (off_n[k]) { out_q(0x80u | out_ch(), off_n[k], 0, aS); off_n[k] = 0; }
     seq_note_on = 0;
     seq_note_slot = -1;
     be_all_off(&eng);
@@ -182,9 +196,9 @@ static void a_play_step(uint32_t at)             /* a step starts at sample `at`
     note = (uint32_t)seq_note(&key, &st) & 127u;
     vel = st.flags & SEQ_ACC ? 127u : 90u;       /* 100 and up is an accent to the engine */
     for (k = 0; k < 4u; k++)                     /* a slide into the same note: its pending off must not end this one */
-        if (off_n[k] == note) { out_q(0x80u | out_ch(), note, 0); off_n[k] = 0; }
+        if (off_n[k] == note) { out_q(0x80u | out_ch(), note, 0, at); off_n[k] = 0; }
     be_note_on(&eng, (uint8_t)note, (uint8_t)vel);
-    out_q(0x90u | out_ch(), note, vel);
+    out_q(0x90u | out_ch(), note, vel, at);
     for (k = 0; k < 4u; k++)
         if (!off_n[k]) {
             off_n[k] = (uint8_t)note;
@@ -311,7 +325,7 @@ static void app_audio(int32_t *out, uint32_t n)
         }
         else {
             be_note_off(&eng, off_n[which]);
-            out_q(0x80u | out_ch(), off_n[which], 0);
+            out_q(0x80u | out_ch(), off_n[which], 0, aS + pos);
             if ((int32_t)which == seq_note_slot) { seq_note_on = 0; seq_note_slot = -1; }
             off_n[which] = 0;
         }
@@ -1469,11 +1483,6 @@ static void app_main(void)
         platform_poll();
         panel();
         midi_in();
-        while (oq_r != oq_w) {                   /* the sequencer's notes out */
-            uint32_t m = oq[oq_r & (OQ - 1u)];
-            oq_r++;
-            midi_send(m & 0xFFu, (m >> 8) & 0xFFu, (m >> 16) & 0xFFu);
-        }
         if (ui.preview_note && fm1_ms > ui.preview_off_at) { live_note(ui.preview_note, 0); ui.preview_note = 0; }
         cc_out();
         if (play_gen != last_gen) {              /* a step: move the playhead (a strip), or redraw if the lane scrolled */

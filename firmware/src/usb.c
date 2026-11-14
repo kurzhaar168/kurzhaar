@@ -2,7 +2,8 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
  * Modified by JazzMasterT, 2026-11: the app may set the USB maker and product names (APP_USB_MANUFACTURER, APP_USB_PRODUCT);
  * MIDI last: audio streaming interface 1, MIDI 2 (FELUCCA_UAC_MIDI_LAST, the macOS 15 fix of Felucca #67 / PR #322);
- * the audio ring's band set for 256-frame renders (it was set for 128: ~1.7 % of the frames sent were repeats). */
+ * the audio ring's band set for 256-frame renders (it was set for 128: ~1.7 % of the frames sent were repeats);
+ * APP_MIDI_OUT_TICK (an app's timed MIDI out from the USB poll). */
 /* USB full-speed device on USB0: a class-compliant USB-MIDI interface.
  * All SIE traffic happens in usb_poll(), called from the TIMER5 ISR at 2 kHz,
  * so INDEX is never shared and no USB IRQ is needed. MIDI in goes to a ring
@@ -180,7 +181,8 @@ static uint32_t midi_in_t[MQ];                      /* each incoming message's a
 #else
 #define MIDI_IN_STAMP() ((void)0)
 #endif
-static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
+static void midi_out_event(uint32_t pkt)            /* one writer at a time: the main loop with interrupts off, or the
+                                                       TIMER5 ISR (APP_MIDI_OUT_TICK) */
 {
     if (usb.config && mo_w - mo_r < MQ) {
         midi_out_q[mo_w % MQ] = pkt;
@@ -1321,6 +1323,10 @@ static void usb_poll(void)                              /* TIMER5 ISR, 2 kHz */
         usb.rx_pend = 1;                                /* (the flag reads once: remember the packet) */
     if (usb.rx_pend)
         ep1_rx();
+#ifdef APP_MIDI_OUT_TICK
+    if (usb.config)
+        APP_MIDI_OUT_TICK();                            /* the app's MIDI, each at its time (2 kHz, not held up by the screen) */
+#endif
     if (usb.config)
         ep1_tx();
 #if FELUCCA_CDC

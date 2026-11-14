@@ -86,6 +86,9 @@ Connect the FM-1 over USB. It appears as a MIDI port named **Kurzhaar FM-1**.
   the notes land, and turn OFFSET left by that much (− plays earlier, up to 10 ms). Measure from bar 2 on: the
   first note after Start cannot be early. In an aggregate device, tick drift correction for the FM-1, or a long
   recording slowly slides against the grid.
+- **Notes from the DAW:** Kurzhaar plays each MIDI note a fixed time after it arrives (about 13 ms from the DAW
+  sending it to the sound, steady to within a millisecond), so one negative **track delay** on the MIDI track lines
+  them up: in Studio One with USB audio at 48 kHz, about −11 ms (−10.8 ms measured). The FM-1's own keys play at once.
 - **If the FM-1 is missing as an audio input on a Mac:** close any browser tab that talks to it (the Firmware Hub,
   for one) and plug it in again. While a browser holds the FM-1, macOS cannot open its audio.
 
