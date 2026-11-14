@@ -657,6 +657,55 @@ typedef struct { uint32_t magic; be_patch_t p[NPATCH]; } store_patch_t;
 _Static_assert(sizeof(store_seq_t) <= SLOT_MAX && sizeof(store_patch_t) <= SLOT_MAX, "a store fits a slot");
 _Static_assert(sizeof glo <= 12u, "glo fits");
 
+/* Factory patterns 3-16, one string each: 16 steps, in scale degrees of the key (A minor at first, so 0 = A,
+ * 2 = C, 4 = E, 6 = G). A step: "." a rest, "_" a tie (holds the note before), or a degree 0-9, then ' (an octave up)
+ * or , (an octave down), then a (accent) and/or s (slide into the next step), then a gate 1-4 (25-100 %, else 50 %). */
+static const char *const FPAT[SEQ_NPAT - 2u] = {
+    "0a 0' . 0 3s 4a . 0' 6,s 0 0' . 4 3s 2 0",        /*  3 acid squelch */
+    "5, 5 5, 5 0a 0' 0 0' 3 3' 3 3' 6,a 6 6, 6",        /*  4 octave pump */
+    ". 0 0 0a . 0 0 0a . 0 0 0a . 2 2 3a",                /*  5 rolling offbeat */
+    "0a _ _ _ . . 2s 0 _ _ 6, _ 5, _ _ .",                /*  6 reese, long notes */
+    "0a1 . 0'1 . 0 2 . 3 . 3s 4 . 0'a1 . 6 4",          /*  7 funk sixteenths */
+    "0a _ _ . . . 4, _ . . 0 _ 2s 0 _ .",                 /*  8 dub, half time */
+    "0a . . 0 . . 0a . . 0 . 3 . 4s 0' .",                /*  9 electro */
+    "0 2s 4s 6a 4 2s 0 . 0' 6s 4 2a 3s 2 0 .",           /* 10 slide melody */
+    "0a 0 0 0a 0 0 0a 0 0 0a 0 0 2a 2 3a 3",              /* 11 gallop */
+    "0a . . . . . 0 . . . 0 . . 6,s 0 .",                 /* 12 minimal */
+    "0a . 2 3 4a . 6 4 0'a . 6 4 3s 2 0 .",              /* 13 walking */
+    "0a _ _ _ 0's 0 _ _ 5,a _ _ _ 6,s 6 4, .",           /* 14 wobble, half time */
+    "0a 0's _ 0 3a . 2s 0 . 0' 4s _ 3 2a 0 6,",          /* 15 acid, ties and slides */
+    "0 0' . 0' 0 0' 4 3s 2 2' . 2' 6, 6 6,a 6s",          /* 16 disco octaves */
+};
+
+static void pat_parse(seq_pat_t *p, const char *t)
+{
+    uint32_t n = 0;
+    while (*t && n < 16u) {
+        seq_step_t *s = &p->s[n];
+        while (*t == ' ') t++;
+        if (*t == '.') t++;
+        else if (*t == '_') { s->flags = SEQ_ON | SEQ_TIE; t++; }
+        else {
+            s->flags = SEQ_ON; s->deg = (int8_t)(*t++ - '0');
+            for (;; t++) {
+                if (*t == '\'') s->oct++; else if (*t == ',') s->oct--;
+                else if (*t == 'a') s->flags |= SEQ_ACC; else if (*t == 's') s->flags |= SEQ_SLIDE;
+                else if (*t >= '1' && *t <= '4') s->gate_chrom = (uint8_t)(*t - '1');
+                else break;
+            }
+        }
+        while (*t && *t != ' ') t++;
+        n++;
+    }
+}
+
+static int pat_empty(const seq_pat_t *p)
+{
+    uint32_t i;
+    for (i = 0; i < SEQ_MAXLEN; i++) if (p->s[i].flags & SEQ_ON) return 0;
+    return 1;
+}
+
 static void factory(void)
 {
     static const struct { uint8_t i; int8_t d, o; uint8_t f; } B1[] = {   /* refs/midi/01_bassline.mid (A minor) */
@@ -675,6 +724,7 @@ static void factory(void)
         seq_step_t *s = &pats[1].s[B2[i].i];
         s->flags = (uint8_t)(SEQ_ON | B2[i].f); s->deg = B2[i].d; s->oct = B2[i].o;
     }
+    for (i = 0; i < sizeof FPAT / sizeof FPAT[0]; i++) pat_parse(&pats[2 + i], FPAT[i]);
     for (i = 0; i < NPATCH; i++) {
         if (i < BE_NPATCH) BE_PATCH_FN[i](&patches[i]);
         else be_patch_default(&patches[i]);
@@ -692,7 +742,8 @@ static void store_load(void)
         cur_pat = ss.cur_pat % SEQ_NPAT;
         patch_no = ss.patch_no % NPATCH;
         for (i = 0; i < sizeof glo; i++) ((uint8_t *)&glo)[i] = ss.glo[i];
-        for (i = 0; i < SEQ_NPAT; i++) pats[i] = ss.pats[i];
+        for (i = 0; i < SEQ_NPAT; i++)           /* a pattern saved empty keeps its factory line */
+            if (!pat_empty(&ss.pats[i])) pats[i] = ss.pats[i];
     }
     if (!slot_load(1, &sp, sizeof sp) && sp.magic == BASS_MAGIC)
         for (i = 0; i < NPATCH; i++) patches[i] = sp.p[i];

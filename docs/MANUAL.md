@@ -13,7 +13,7 @@ For installing, see the [README](../README.md#install).
 8. [Tempo, clock and MIDI (GLO)](#8-tempo-clock-and-midi-glo)
 9. [With a DAW](#9-with-a-daw)
 10. [Saving](#10-saving)
-11. [The factory patches](#11-the-factory-patches)
+11. [The factory patches and patterns](#11-the-factory-patches-and-patterns)
 12. [Troubleshooting](#12-troubleshooting)
 
 ---
@@ -60,7 +60,7 @@ instead of its tap job.
 The 27 keys play Kurzhaar like any monosynth: the last key pressed sounds. OCT− and OCT+ shift the keyboard by
 octaves; their lights show when you are off the middle.
 
-Turn **PRESETS** to choose a patch. 1–16 are the factory patches (see [section 11](#11-the-factory-patches));
+Turn **PRESETS** to choose a patch. 1–16 are the factory patches (see [section 11](#11-the-factory-patches-and-patterns));
 17–32 start as a plain saw for your own sounds. Changes you make stay with the patch while the FM-1 is on; hold
 **SAVE** to keep them.
 
@@ -290,7 +290,7 @@ it. Anything you have not saved is gone when the FM-1 is switched off.
 Kurzhaar keeps its own memory. It does not read what other firmwares saved. If another firmware writes over it,
 Kurzhaar starts from its factory patches and patterns next time.
 
-## 11. The factory patches
+## 11. The factory patches and patterns
 
 | # | Name | The sound |
 | --- | --- | --- |
@@ -311,7 +311,32 @@ Kurzhaar starts from its factory patches and patterns next time.
 | 15 | Singing Line | An open saw with gentle vibrato and glide on every note |
 | 16 | Trance Roll | Short detuned saws; the filter lifts over every bar |
 
-Patterns 1 and 2 hold factory basslines in A minor; the other patterns start empty.
+### The factory patterns
+
+All 16 patterns start with a bassline in A minor. They are written in scale steps, so they follow the key and scale
+you set on the SEL page. (Version 1.0 has only patterns 1 and 2; patterns 3–16 come with the next release.)
+
+| # | Style | What's in it | Try it with patch |
+| --- | --- | --- | --- |
+| 1 | Bassline | Accents, octave jumps, two slides | any |
+| 2 | Bassline | Sparser, with one slide | any |
+| 3 | Acid squelch | Octave jumps and two slides | 7 Acid Line, 3 Resonant Squelch |
+| 4 | Octave pump | House and disco octaves walking A, F, D, G | 5 House Pump |
+| 5 | Rolling offbeat | A trance gallop that skips the downbeat | 16 Trance Roll |
+| 6 | Reese | Long tied notes, one slide into the root | 8 Reese |
+| 7 | Funk sixteenths | Short staccato octave stabs | 11 Funk Slap |
+| 8 | Dub | Half time, lots of space, a low E | 10 Deep Dub |
+| 9 | Electro | Syncopated root hits, a slide up an octave | 2 Fat Two Osc |
+| 10 | Slide melody | Glides up the scale and back down | 15 Singing Line |
+| 11 | Gallop | Driving 16ths, an accent every three steps | 12 Growl |
+| 12 | Minimal | Sparse, one slide from a low G | 1 Classic Pluck |
+| 13 | Walking | A melodic line up and back | 4 Round Sub |
+| 14 | Wobble | Half time, tied notes | 9 Wobble |
+| 15 | Acid ties | Slides into tied notes, 303-style | 7 Acid Line |
+| 16 | Disco octaves | An octave bounce on A, C and G | 14 Octave Disco |
+
+A pattern you saved empty gets its factory bassline back the next time the FM-1 starts; a pattern with notes in it
+is never changed.
 
 ## 12. Troubleshooting
 
