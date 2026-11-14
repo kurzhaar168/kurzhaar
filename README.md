@@ -134,3 +134,7 @@ platform underneath is Felucca's, by Leo Kuroshita (Hügelton Instruments), with
 SMK-37 layer (M. Geisler) and Dinghy (zvenson). Kurzhaar is an independent project: it is not made, endorsed or
 supported by Hügelton Instruments (Felucca), by Dinghy's author, or by M-VAVE. "M-VAVE" and "FM-1" belong to their
 owners.
+
+## If you enjoy this Firmware
+
+If you download the firmware and find it useful, consider making a donation to support me at: https://buymeacoffee.com/jazzmastert
