@@ -66,8 +66,11 @@ SDK_SHA256 = {
 }
 
 BOARD = "fm1"                       # fm1 (default) or smk37: BOARD env or --board
-BOARD_PREFIX = {"fm1": "FM-1_94" if KURZHAAR else "FM-1_99", "smk37": "SMK-37 Pro_99"}   # identity: prefix + minor (0: a dev
-                                    # build). Kurzhaar: FM-1_94N; Dinghy: 99N
+BOARD_PREFIX = {"fm1": "FM-1_99", "smk37": "SMK-37 Pro_99"}   # Dinghy's identity: prefix + minor (0: a dev build): 99N
+KH_PREFIX = "FM-1_9168"             # Kurzhaar's identity: FM-1_9168XXYY, XX.YY the version (00 00: a dev build). Its own,
+                                    # checked against the Firmware Hub's catalogue (2026-11-14: sloopDX 4 took FM-1_940, the
+                                    # first choice; no product or family pattern there matches FM-1_9168....); 9 first, as the
+                                    # installer's OWN_LOADER_RE wants (ota-FM-1_9..)
 BOARD_DEFS = {"fm1": [], "smk37": ["-DBOARD_SMK37=1"]}
 MODELS = {"pro": "SMK-37 Pro", "elite": "SMK-37 Elite", "mke": "MKE-P37"}   # smk37: one keyboard, three names
 DATA_FAMILY = "DINGHY"              # the SMK store's owner tag (store.h): 1..7 of A-Z 0-9. Your fork: your own
@@ -79,7 +82,8 @@ if any(ch != " " and ch not in _LDR_CH for ch in SCREEN_NAME):   # the update sc
     raise SystemExit(f"SCREEN_NAME {SCREEN_NAME!r}: the update screen has no {sorted(set(SCREEN_NAME) - set(_LDR_CH) - {' '})}"
                      " (firmware/loader/ldr_screen.c LDR_FONT)")
 SCREEN_COLOUR = 0xFDA8 if KURZHAAR else 0xB47F   # Kurzhaar: amber #FFB547; Dinghy: lilac
-PRODUCT = BOARD_PREFIX["fm1"] + "0" # Kurzhaar: 94N, Dinghy: 99N (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
+PRODUCT = KH_PREFIX + "0000" if KURZHAAR else BOARD_PREFIX["fm1"] + "0"   # (OUR_LOADER in the installer wants FM-1_9..).
+                                    # Your fork: pick your own (look it up in thefirmwarehub.com/catalog.json)
 VERSION = None                      # APP_VER for release builds
 
 
@@ -321,7 +325,7 @@ def mmio_check():
 def main():
     global PRODUCT, VERSION, BOARD, APP_SLOT
     ap = argparse.ArgumentParser()
-    ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_94Y (Dinghy: 99Y), version string X.Y")
+    ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_9168XXYY (Dinghy: 99Y), version string X.Y")
     ap.add_argument("--board", choices=sorted(BOARD_PREFIX), default=None,
                     help="target board: fm1 (default) or smk37 (default: $BOARD, else fm1)")
     ap.add_argument("--model", choices=sorted(MODELS), default=None,
@@ -341,7 +345,7 @@ def main():
         BOARD_DEFS[BOARD] = [*BOARD_DEFS[BOARD], f'-DSMK_MODEL="{MODELS[model]}"']
         BOARD_PREFIX[BOARD] = BOARD_PREFIX[BOARD].replace(MODELS["pro"], MODELS[model])
         suffix += "-" + model
-    PRODUCT = BOARD_PREFIX[BOARD] + "0"
+    PRODUCT = KH_PREFIX + "0000" if KURZHAAR else BOARD_PREFIX[BOARD] + "0"
     pkg = "kurzhaar" if KURZHAAR else "dinghy"
     if KURZHAAR and BOARD != "fm1":
         raise SystemExit("Kurzhaar is made for the FM-1 (its keys, buttons and knobs): BOARD=fm1")
@@ -350,7 +354,7 @@ def main():
         m = re.fullmatch(r"(\d)\.(\d)(\.\d)?(-[A-Za-z0-9]+)?", a.release)
         if not m:
             raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z or X.Y-suffix, one digit each")
-        PRODUCT = BOARD_PREFIX[BOARD] + m[2]
+        PRODUCT = KH_PREFIX + f"{int(m[1]):02d}{int(m[2]):02d}" if KURZHAAR else BOARD_PREFIX[BOARD] + m[2]
         VERSION = m[1] + "." + m[2] + (m[3] or "")
         name = f"{pkg}-{a.release}{suffix}.fwsc"
     fm1pkg_make.SDK = a.sdk

@@ -7,7 +7,7 @@ meant to sit next to a DAW: it follows MIDI clock tightly or runs on its own tem
 changes and filter automation over USB.
 
 Named for Lucca, a German Shorthaired Pointer (*Deutsch Kurzhaar*), who is on the splash screen. By JazzMasterT. Built on [Dinghy](https://github.com/zvenson/dinghy)
-and [Fekurzhaar](https://github.com/hugelton/Fekurzhaar). GPL-3.0.
+and [Felucca](https://github.com/hugelton/Felucca). GPL-3.0.
 
 <p align="center">
   <img src="docs/img/sequencer.png" width="240" alt="The sequencer, playing">
@@ -126,7 +126,7 @@ GPL-3.0-only. Anyone who gets this firmware gets its source too. Credits and thi
 [LICENSING.md](LICENSING.md).
 
 Kurzhaar (the app, the sound engine, the sequencer, the clock, the patches) is Copyright (C) 2026 JazzMasterT. The
-platform underneath is Fekurzhaar's, by Leo Kuroshita (Hügelton Instruments), with the work of SLOOP (isod89), the
+platform underneath is Felucca's, by Leo Kuroshita (Hügelton Instruments), with the work of SLOOP (isod89), the
 SMK-37 layer (M. Geisler) and Dinghy (zvenson). Kurzhaar is an independent project: it is not made, endorsed or
-supported by Hügelton Instruments (Fekurzhaar), by Dinghy's author, or by M-VAVE. "M-VAVE" and "FM-1" belong to their
+supported by Hügelton Instruments (Felucca), by Dinghy's author, or by M-VAVE. "M-VAVE" and "FM-1" belong to their
 owners.
