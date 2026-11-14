@@ -105,6 +105,10 @@ python3 tools/fm1_install.py kurzhaar-1.0.fwsc      # over USB; asks before it w
 [FM-1 Firmware Hub](https://thefirmwarehub.com) in Chrome or Edge. If Kurzhaar will not start, hold **OCT−** while
 switching on: the FM-1 starts in the USB rescue, where any firmware can be installed.
 
+Kurzhaar keeps its own patches, patterns and settings (hold **SAVE**). It does not read what other firmwares saved, and
+they do not read its. Another firmware may write over what Kurzhaar saved: coming back, Kurzhaar then starts from
+its factory patches and patterns.
+
 ## Build
 
 The setup is Dinghy's: Python 3, the JieLi toolchain and three files of the AC79 SDK. See

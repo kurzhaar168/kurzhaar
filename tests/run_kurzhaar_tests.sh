@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 JazzMasterT
 # Kurzhaar's tests on this computer (no hardware): the sequencer, the sound engine, the clock and the app.
-#   sh tests/run_kurzhaar_tests.sh          (Python 3 with numpy and scipy; any C compiler as cc)
+#   sh tests/run_kurzhaar_tests.sh          (Python 3 with numpy, scipy, mido and Pillow; any C compiler as cc)
 set -e
 cd "$(dirname "$0")/.."
 PY="${PYTHON:-python3}"

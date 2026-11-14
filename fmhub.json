@@ -1,0 +1,7 @@
+{
+  "what": "A monophonic analog-style bass synth with a step sequencer: two oscillators and a sub into a resonant ladder filter, two LFOs, drive and reverb, 16 presets. Basslines in your key and scale, 16 patterns, tight sync to a DAW's MIDI clock, and recording over USB audio.",
+  "author": "JazzMasterT",
+  "kinds": ["synth"],
+  "image": "docs/card.png",
+  "color": "#FFB547"
+}

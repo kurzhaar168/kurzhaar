@@ -25,7 +25,7 @@ jobs:
           python-version: '3.x'
 
       - name: Python packages
-        run: python3 -m pip install Pillow numpy scipy
+        run: python3 -m pip install Pillow numpy scipy mido
 
       - name: JieLi toolchain (pkgman.jieliapp.com)
         run: sh tools/get_toolchain.sh
