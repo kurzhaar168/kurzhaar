@@ -1,6 +1,6 @@
 # Kurzhaar, der Basshund: the manual
 
-Kurzhaar turns the M-VAVE FM-1 into a monophonic bass synth with a step sequencer. This manual covers version 1.0.
+Kurzhaar turns the M-VAVE FM-1 into a monophonic bass synth with a step sequencer. This manual covers version 1.1.
 For installing, see the [README](../README.md#install).
 
 1. [The panel at a glance](#1-the-panel-at-a-glance)
@@ -314,7 +314,7 @@ Kurzhaar starts from its factory patches and patterns next time.
 ### The factory patterns
 
 All 16 patterns start with a bassline in A minor. They are written in scale steps, so they follow the key and scale
-you set on the SEL page. (Version 1.0 has only patterns 1 and 2; patterns 3–16 come with the next release.)
+you set on the SEL page. (Version 1.0 had only patterns 1 and 2.)
 
 | # | Style | What's in it | Try it with patch |
 | --- | --- | --- | --- |

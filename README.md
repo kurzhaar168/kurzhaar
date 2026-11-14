@@ -98,7 +98,7 @@ Download `kurzhaar-X.Y.fwsc` from the [releases](../../releases), then:
 
 ```sh
 pip3 install mido python-rtmidi
-python3 tools/fm1_install.py kurzhaar-1.0.fwsc      # over USB; asks before it writes
+python3 tools/fm1_install.py kurzhaar-1.1.fwsc      # over USB; asks before it writes
 ```
 
 **Installing firmware is at your own risk.** To return to another firmware, or to the official one, use the
@@ -116,7 +116,7 @@ The setup is Dinghy's: Python 3, the JieLi toolchain and three files of the AC79
 
 ```sh
 ./build.sh                          # -> build/kurzhaar.fwsc
-./build.sh --release 1.0            # -> build/kurzhaar-1.0.fwsc
+./build.sh --release 1.1            # -> build/kurzhaar-1.1.fwsc
 tests/run_host.sh tests/scripts/bass_tour.txt   # Kurzhaar on your computer: screens (PNG) and sound (WAV) in build/host
 sh tests/run_kurzhaar_tests.sh         # the sequencer, the sound engine, the clock (needs numpy and scipy)
 ```
