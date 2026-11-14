@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Modified by JazzMasterT, 2026-11: fm1_ticks and midi_get_t stand-ins for the clock. */
 /* A fake FM-1 (or SMK-37) on a computer: the app (firmware/src/dinghy.c) runs unchanged on it. platform.c includes
  * this file instead of the hardware when DINGHY_HOST is set. A script presses keys over time; out come
  * the screen (PPM, at the times SHOT asks) and the sound (WAV, as the FM-1 sends it over USB).

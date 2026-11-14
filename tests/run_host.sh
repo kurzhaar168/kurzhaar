@@ -1,7 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
+# Modified by JazzMasterT, 2026-11: DINGHY_APP selects the app (Kurzhaar by default).
 # Run the app on this computer (tests/host.c): build/host/<app>.wav and the screens as PNG. The app: firmware/src/bass.c
-# (Lucca, the default), or DINGHY_APP=dinghy (the platform's own app).
+# (Kurzhaar, the default), or DINGHY_APP=dinghy (the platform's own app).
 #   tests/run_host.sh [script]               your own script (tests/host.c says what a line can do)
 #   BOARD=smk37 tests/run_host.sh [script]   the SMK-37 build (velocity, pads, faders, wheels, outer keys)
 set -e

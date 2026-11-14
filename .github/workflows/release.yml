@@ -1,4 +1,5 @@
-# Lucca: build on GitHub, run the platform's and Lucca's host tests, and on a tag vX.Y publish the release with a build
+# Modified by JazzMasterT, 2026-11: builds, tests and releases Kurzhaar (the platform tests still with Dinghy's app).
+# Kurzhaar: build on GitHub, run the platform's and Kurzhaar's host tests, and on a tag vX.Y publish the release with a build
 # attestation (actions/attest-build-provenance): the Firmware Hub shows "Built from source" for exactly these files.
 # The JieLi toolchain comes from pkgman.jieliapp.com (tools/get_toolchain.sh), the AC79 SDK from gitee.com, as in
 # sloopDX's and OberVave's workflows. Run by hand (workflow_dispatch) for a test build without a release.
@@ -49,39 +50,42 @@ jobs:
           sh build.sh
           sh tests/run_tests.sh
 
-      - name: Lucca (FM-1)
+      - name: Kurzhaar (FM-1)
         run: |
           sh build.sh
-          sh tests/run_lucca_tests.sh
+          sh tests/run_kurzhaar_tests.sh
 
       - name: Release packages (tags only)
         if: github.ref_type == 'tag'
         run: |
           V="${GITHUB_REF_NAME#v}"
           sh build.sh --release "$V"
-          ls -l build/lucca-"$V".fwsc
-          (cd build && sha256sum lucca-"$V".fwsc > SHA256SUMS)
+          ls -l build/kurzhaar-"$V".fwsc
+          (cd build && sha256sum kurzhaar-"$V".fwsc > SHA256SUMS)
           cp assets/JieLi-AC79-SDK-LICENSE.txt build/   # the package carries three SDK files (Apache-2.0)
+          cp LICENSE build/LICENSE-GPL-3.0.txt && cp LICENSING.md build/   # the GPL travels with the firmware; the credits
 
       - uses: actions/upload-artifact@v4
         with:
-          name: lucca-fwsc
-          path: build/lucca*.fwsc
+          name: kurzhaar-fwsc
+          path: build/kurzhaar*.fwsc
           if-no-files-found: error
 
       - name: Attest the packages (tags only)
         if: github.ref_type == 'tag'
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: build/lucca-[0-9]*.fwsc
+          subject-path: build/kurzhaar-[0-9]*.fwsc
 
-      # (the release build only, not the dev one: lucca.fwsc – no comment inside the block below: it would be part of the pattern)
+      # (the release build only, not the dev one: kurzhaar.fwsc – no comment inside the block below: it would be part of the pattern)
       - name: Release (tags only)
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/lucca-[0-9]*.fwsc
+            build/kurzhaar-[0-9]*.fwsc
             build/SHA256SUMS
             build/JieLi-AC79-SDK-LICENSE.txt
+            build/LICENSE-GPL-3.0.txt
+            build/LICENSING.md
           generate_release_notes: true

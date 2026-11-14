@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
+ * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+ * Modified by JazzMasterT, 2026-11: the app may set the USB maker and product names (APP_USB_MANUFACTURER, APP_USB_PRODUCT). */
 /* USB full-speed device on USB0: a class-compliant USB-MIDI interface.
  * All SIE traffic happens in usb_poll(), called from the TIMER5 ISR at 2 kHz,
  * so INDEX is never shared and no USB IRQ is needed. MIDI in goes to a ring
@@ -288,8 +289,16 @@ static const uint8_t STR1[] = {42, 3, 'H', 0, 0xFC, 0, 'g', 0, 'e', 0, 'l', 0, '
 #ifdef FELUCCA_LOADER
 static const uint8_t STR2[] = {30, 3, 'F', 0, 'e', 0, 'l', 0, 'u', 0, 'c', 0, 'c', 0, 'a', 0, ' ', 0, 'U', 0, 'p', 0,
                                'd', 0, 'a', 0, 't', 0, 'e', 0};
+#elif defined(APP_USB_PRODUCT)
+/* an app's own product name (ASCII): the MIDI port's name, e.g. #define APP_USB_PRODUCT "Mine FM-1" before platform.c */
+static uint8_t STR2[2u + 2u * (sizeof APP_USB_PRODUCT - 1u)];
+#define STR2_INIT() do { if (!STR2[0]) { uint32_t i_; STR2[0] = sizeof STR2; STR2[1] = 3; \
+    for (i_ = 0; i_ + 1u < sizeof APP_USB_PRODUCT; i_++) { STR2[2u + 2u * i_] = (uint8_t)APP_USB_PRODUCT[i_]; STR2[3u + 2u * i_] = 0; } } } while (0)
 #else
 static const uint8_t STR2[] = {16, 3, 'F', 0, 'e', 0, 'l', 0, 'u', 0, 'c', 0, 'c', 0, 'a', 0};
+#endif
+#ifndef STR2_INIT
+#define STR2_INIT() do { } while (0)
 #endif
 
 static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
@@ -325,6 +334,7 @@ static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
             *l = sizeof STR1;
             return 1;
         case 2:
+            STR2_INIT();
             *d = STR2;
             *l = sizeof STR2;
             return 1;

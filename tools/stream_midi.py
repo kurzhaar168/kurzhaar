@@ -9,7 +9,7 @@ import mido
 ap = argparse.ArgumentParser()
 ap.add_argument("midi", nargs="?", default="refs/midi/00_all.mid")
 ap.add_argument("--loops", type=int, default=2)
-ap.add_argument("--port", default="Felucca")
+ap.add_argument("--port", default="Kurzhaar")
 ap.add_argument("--bpm", type=float, default=120.0)
 ap.add_argument("--clock-only", type=float, metavar="SECONDS", help="no notes: Start, clock for SECONDS, Stop")
 ap.add_argument("--bpm-to", type=float, help="with --clock-only: ramp the tempo to this by the end")

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Modified by JazzMasterT, 2026-11: the engine's test harness (DINGHY_ENGINE), the benchmark and output test hooks. */
 /* Dinghy: the smallest FM-1 firmware to build your own on. A sine wave on the keys, and that is all.
  * This is the file to change. Everything below it (platform.c) is done: updates, the USB rescue,
  * MIDI (USB, the TRS jack), USB audio, keys, knobs, LEDs, the screen, flash storage; the FM-1 and the SMK-37.

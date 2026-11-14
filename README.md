@@ -1,13 +1,13 @@
-<p align="center"><img src="docs/img/splash.png" width="240" alt="Lucca: das Bassmaschine"></p>
+<p align="center"><img src="docs/img/splash.png" width="240" alt="Kurzhaar, der Basshund"></p>
 
-# Lucca: das Bassmaschine
+# Kurzhaar, der Basshund
 
 Firmware that turns the **M-VAVE FM-1** into a monophonic analog-style bass synth with a step sequencer. It is
 meant to sit next to a DAW: it follows MIDI clock tightly or runs on its own tempo, and it takes notes, program
 changes and filter automation over USB.
 
-Named after Lucca, a German Shorthaired Pointer. By JazzMasterT. Built on [Dinghy](https://github.com/zvenson/dinghy)
-and [Felucca](https://github.com/hugelton/Felucca). GPL-3.0.
+Named for Lucca, a German Shorthaired Pointer (*Deutsch Kurzhaar*), who is on the splash screen. By JazzMasterT. Built on [Dinghy](https://github.com/zvenson/dinghy)
+and [Fekurzhaar](https://github.com/hugelton/Fekurzhaar). GPL-3.0.
 
 <p align="center">
   <img src="docs/img/sequencer.png" width="240" alt="The sequencer, playing">
@@ -63,11 +63,11 @@ The full map is in [docs/DESIGN.md](docs/DESIGN.md#63-panel-map-settled-2026-11-
 
 ## With a DAW
 
-Connect the FM-1 over USB. It appears as a MIDI port named **Felucca** (the name comes from the platform).
+Connect the FM-1 over USB. It appears as a MIDI port named **Kurzhaar FM-1**.
 
 - **Clock:** GLO › MIDI › CLOCK set to AUTO follows the DAW's clock and its start and stop; with no clock coming in,
-  Lucca runs on its own tempo.
-- **Notes:** play Lucca from the DAW on the MIDI channel set in GLO (OMNI by default). NOTES OUT sends the
+  Kurzhaar runs on its own tempo.
+- **Notes:** play Kurzhaar from the DAW on the MIDI channel set in GLO (OMNI by default). NOTES OUT sends the
   sequencer's notes back, so you can record them.
 - **Automation:** CC 74 is cutoff and CC 71 is resonance, received and/or sent (GLO › MIDI › CC).
 - **Patches:** a program change (1–32) selects the patch.
@@ -76,15 +76,15 @@ Connect the FM-1 over USB. It appears as a MIDI port named **Felucca** (the name
 
 ## Install
 
-Download `lucca-X.Y.fwsc` from the [releases](../../releases), then:
+Download `kurzhaar-X.Y.fwsc` from the [releases](../../releases), then:
 
 ```sh
 pip3 install mido python-rtmidi
-python3 tools/fm1_install.py lucca-1.0.fwsc      # over USB; asks before it writes
+python3 tools/fm1_install.py kurzhaar-1.0.fwsc      # over USB; asks before it writes
 ```
 
 **Installing firmware is at your own risk.** To return to another firmware, or to the official one, use the
-[FM-1 Firmware Hub](https://thefirmwarehub.com) in Chrome or Edge. If Lucca will not start, hold **OCT−** while
+[FM-1 Firmware Hub](https://thefirmwarehub.com) in Chrome or Edge. If Kurzhaar will not start, hold **OCT−** while
 switching on: the FM-1 starts in the USB rescue, where any firmware can be installed.
 
 ## Build
@@ -93,10 +93,10 @@ The setup is Dinghy's: Python 3, the JieLi toolchain and three files of the AC79
 [docs/DINGHY.md](docs/DINGHY.md#2-set-up-once). Then:
 
 ```sh
-./build.sh                          # -> build/lucca.fwsc
-./build.sh --release 1.0            # -> build/lucca-1.0.fwsc
-tests/run_host.sh tests/scripts/bass_tour.txt   # Lucca on your computer: screens (PNG) and sound (WAV) in build/host
-sh tests/run_lucca_tests.sh         # the sequencer, the sound engine, the clock (needs numpy and scipy)
+./build.sh                          # -> build/kurzhaar.fwsc
+./build.sh --release 1.0            # -> build/kurzhaar-1.0.fwsc
+tests/run_host.sh tests/scripts/bass_tour.txt   # Kurzhaar on your computer: screens (PNG) and sound (WAV) in build/host
+sh tests/run_kurzhaar_tests.sh         # the sequencer, the sound engine, the clock (needs numpy and scipy)
 ```
 
 To render the patches to WAV, use `tools/render.py`. The patches themselves are plain text in `patches/`; after
@@ -107,7 +107,8 @@ editing one, run `tools/gen_patches.py`.
 GPL-3.0-only. Anyone who gets this firmware gets its source too. Credits and third-party parts are in
 [LICENSING.md](LICENSING.md).
 
-Lucca (the app, the sound engine, the sequencer, the clock, the patches) is Copyright (C) 2026 JazzMasterT. The
-platform underneath is Felucca's, by Leo Kuroshita (Hügelton Instruments), with the work of SLOOP (isod89), the
-SMK-37 layer (M. Geisler) and Dinghy (zvenson). "M-VAVE" and "FM-1" belong to their owners; Lucca is not made or
-endorsed by them.
+Kurzhaar (the app, the sound engine, the sequencer, the clock, the patches) is Copyright (C) 2026 JazzMasterT. The
+platform underneath is Fekurzhaar's, by Leo Kuroshita (Hügelton Instruments), with the work of SLOOP (isod89), the
+SMK-37 layer (M. Geisler) and Dinghy (zvenson). Kurzhaar is an independent project: it is not made, endorsed or
+supported by Hügelton Instruments (Fekurzhaar), by Dinghy's author, or by M-VAVE. "M-VAVE" and "FM-1" belong to their
+owners.

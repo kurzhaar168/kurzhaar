@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Copyright (C) 2026 JazzMasterT */
-/* The splash at power-on: a synth-sunset sky fades up, Lucca rises into the frame, the LUCCA logo wipes in and a
- * glint runs across it, "das Bassmaschine" fades in. ~4 s; any key or button skips it.
- * The art (three layers, smooth edges): splash_art.h, made by tools/gen_splash_art.py from a photo of Lucca. */
+/* The splash at power-on: a synth-sunset sky fades up, Lucca (the dog Kurzhaar is named for) rises into the
+ * frame, the KURZHAAR logo wipes in and a glint runs across it, "der Basshund" fades in. ~4 s; any key or button skips it.
+ * The art (three layers, smooth edges): splash_art.h, made by tools/gen_splash_art.py (from assets/splash/dog.png). */
 #ifndef SPLASH_H
 #define SPLASH_H
 #include "splash_art.h"

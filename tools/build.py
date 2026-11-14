@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+# Modified by JazzMasterT, 2026-11: Kurzhaar: the default app, its flags, package name and identity; the engine objects; -mcpu for the checks.
 """Build Dinghy (on Felucca / SLOOP's platform): the app, the update loader and an installable .fwsc package.
 
   tools/build.py [--release X.Y[-suffix]] [--board fm1|smk37] [--model pro|elite|mke]
@@ -45,11 +46,11 @@ LOADER_NAME = b"usb_hid_ota.bin"    # the file name the SPL looks for
 DOCKER_IMAGE = os.environ.get("JIELI_DOCKER_IMAGE", "debian:bookworm-slim")
 CFLAGS = ["-Os", "-ffunction-sections", "-fno-builtin", "-Wall", "-Wno-unused-function"]   # keep -Os: with -O2 (unity
                                     # build, usb.c inside) the FM-1's USB-MIDI IN babbled on the device (OberVave, 2026-10-13)
-APP = os.environ.get("DINGHY_APP", "bass")                    # the app: firmware/src/<APP>.c: bass (Lucca, the default)
+APP = os.environ.get("DINGHY_APP", "bass")                    # the app: firmware/src/<APP>.c: bass (Kurzhaar, the default)
                                                               # or dinghy (the platform's own app, for its tests)
-LUCCA = APP == "bass"
-# extra compiler flags; Lucca's default: the hardware FPU (-mcpu=r3) and the audio code in RAM
-DEFS = os.environ.get("DINGHY_DEFS", "-mcpu=r3 -DBE_RAM_CODE" if LUCCA else "").split()
+KURZHAAR = APP == "bass"
+# extra compiler flags; Kurzhaar's default: the hardware FPU (-mcpu=r3) and the audio code in RAM
+DEFS = os.environ.get("DINGHY_DEFS", "-mcpu=r3 -DBE_RAM_CODE" if KURZHAAR else "").split()
 ENGINE_OPT = os.environ.get("DINGHY_ENGINE_OPT", "-O2")     # the bass engine's optimisation (firmware/engine)
 ENGINE_SRCS = ["be.c", "clk.c", "player.c", "seq.c", "verb.c"]                  # each its own object (unused ones: --gc-sections)
 # the checks read the disassembly: decode for the CPU the code was built for (-mcpu=r3 has FPU instructions; read
@@ -65,15 +66,15 @@ SDK_SHA256 = {
 }
 
 BOARD = "fm1"                       # fm1 (default) or smk37: BOARD env or --board
-BOARD_PREFIX = {"fm1": "FM-1_94" if LUCCA else "FM-1_99", "smk37": "SMK-37 Pro_99"}   # identity: prefix + minor (0: a dev
-                                    # build). Lucca: FM-1_94N; Dinghy: 99N
+BOARD_PREFIX = {"fm1": "FM-1_94" if KURZHAAR else "FM-1_99", "smk37": "SMK-37 Pro_99"}   # identity: prefix + minor (0: a dev
+                                    # build). Kurzhaar: FM-1_94N; Dinghy: 99N
 BOARD_DEFS = {"fm1": [], "smk37": ["-DBOARD_SMK37=1"]}
 MODELS = {"pro": "SMK-37 Pro", "elite": "SMK-37 Elite", "mke": "MKE-P37"}   # smk37: one keyboard, three names
 DATA_FAMILY = "DINGHY"              # the SMK store's owner tag (store.h): 1..7 of A-Z 0-9. Your fork: your own
-SCREEN_NAME = os.environ.get("DINGHY_SCREEN_NAME", "LUCCA" if LUCCA else "DINGHY")
+SCREEN_NAME = os.environ.get("DINGHY_SCREEN_NAME", "KURZHAAR" if KURZHAAR else "DINGHY")
                                     # the update loader's screen (FM-1, ldr_screen.c): the name and its colour (RGB565)
-SCREEN_COLOUR = 0xFDA8 if LUCCA else 0xB47F   # Lucca: amber #FFB547; Dinghy: lilac
-PRODUCT = BOARD_PREFIX["fm1"] + "0" # Lucca: 94N, Dinghy: 99N (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
+SCREEN_COLOUR = 0xFDA8 if KURZHAAR else 0xB47F   # Kurzhaar: amber #FFB547; Dinghy: lilac
+PRODUCT = BOARD_PREFIX["fm1"] + "0" # Kurzhaar: 94N, Dinghy: 99N (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
 VERSION = None                      # APP_VER for release builds
 
 
@@ -179,7 +180,7 @@ def build_loader():
 
 def build_app():
     flags = [*CFLAGS, *BOARD_DEFS[BOARD], "-Ifirmware/hal", "-Ifirmware/src", "-Ifirmware/gen", f'-DFELUCCA_ID="{PRODUCT}"',
-             f'-DAPP_VER="{VERSION or ("dev" if LUCCA else "0.0")}"']
+             f'-DAPP_VER="{VERSION or ("dev" if KURZHAAR else "0.0")}"']
     if BOARD == "smk37":
         if not re.fullmatch(r"[A-Z0-9]{1,7}", DATA_FAMILY):
             raise SystemExit("DATA_FAMILY: 1..7 of A-Z 0-9")
@@ -336,9 +337,9 @@ def main():
         BOARD_PREFIX[BOARD] = BOARD_PREFIX[BOARD].replace(MODELS["pro"], MODELS[model])
         suffix += "-" + model
     PRODUCT = BOARD_PREFIX[BOARD] + "0"
-    pkg = "lucca" if LUCCA else "dinghy"
-    if LUCCA and BOARD != "fm1":
-        raise SystemExit("Lucca is made for the FM-1 (its keys, buttons and knobs): BOARD=fm1")
+    pkg = "kurzhaar" if KURZHAAR else "dinghy"
+    if KURZHAAR and BOARD != "fm1":
+        raise SystemExit("Kurzhaar is made for the FM-1 (its keys, buttons and knobs): BOARD=fm1")
     name = f"{pkg}{suffix}.fwsc"
     if a.release:                   # one digit each: the identity has room for two (X.Y; a .Z only in the text)
         m = re.fullmatch(r"(\d)\.(\d)(\.\d)?(-[A-Za-z0-9]+)?", a.release)

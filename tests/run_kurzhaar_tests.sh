@@ -1,8 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 JazzMasterT
-# Lucca's tests on this computer (no hardware): the sequencer, the sound engine, the clock and the app.
-#   sh tests/run_lucca_tests.sh          (Python 3 with numpy and scipy; any C compiler as cc)
+# Kurzhaar's tests on this computer (no hardware): the sequencer, the sound engine, the clock and the app.
+#   sh tests/run_kurzhaar_tests.sh          (Python 3 with numpy and scipy; any C compiler as cc)
 set -e
 cd "$(dirname "$0")/.."
 PY="${PYTHON:-python3}"
@@ -17,4 +17,4 @@ run "clock: the internal tempo, MIDI clock with jitter, step rates, start/stop" 
 run "the app on the host: the pages, ideas, a program change" env DINGHY_APP=bass sh tests/run_host.sh tests/scripts/bass_ideas.txt
 run "the app on the host: the LFO, clock, MIDI and ABOUT pages" env DINGHY_APP=bass sh tests/run_host.sh tests/scripts/bass_pages.txt
 
-[ $fail = 0 ] && echo "LUCCA TESTS PASSED" || { echo "LUCCA TESTS FAILED"; exit 1; }
+[ $fail = 0 ] && echo "KURZHAAR TESTS PASSED" || { echo "KURZHAAR TESTS FAILED"; exit 1; }

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Copyright (C) 2026 JazzMasterT */
-/* Lucca: das Bassmaschine. The bass machine (docs/DESIGN.md): an analog-style mono bass synth with a step sequencer, locked to a DAW's clock
+/* Kurzhaar, der Basshund. The bass machine (docs/DESIGN.md): an analog-style mono bass synth with a step sequencer, locked to a DAW's clock
  * or its own tempo, in a key and scale. Build: DINGHY_APP=bass DINGHY_DEFS="-mcpu=r3 -DBE_RAM_CODE" ./build.sh
  * The control map is docs/DESIGN.md 6.3 (approved from the clickable mockup).
  *
@@ -13,9 +13,10 @@
 #define CV_MAX (240u * 150u)                     /* the screen's middle: one canvas */
 static void app_idle(void);
 #define LCD_IDLE app_idle
-#define APP_NAME "LUCCA"                        /* Lucca: das Bassmaschine */
+#define APP_NAME "KURZHAAR"                     /* Kurzhaar, der Basshund (named for Lucca, a German Shorthaired Pointer) */
 #define STORE_MAGIC 0x53534142u                  /* "BASS": this firmware's own store (store.h) */
-#define APP_USB_MANUFACTURER "JazzMasterT"       /* USB: the maker's name (the MIDI port keeps the platform's name) */
+#define APP_USB_MANUFACTURER "JazzMasterT"       /* USB: the maker's name */
+#define APP_USB_PRODUCT "Kurzhaar FM-1"             /* USB: the MIDI port's name (the update loader keeps its own) */
 #define FM1_OUT_SHIFT 8                          /* the DAC's full range: +6 dB on Dinghy (our limiter holds the peaks
                                                     below full scale; the output was measured clean to -1 dBFS) */
 #include "platform.c"
@@ -37,8 +38,8 @@ static void app_idle(void);
 #include <stddef.h>
 
 #define FS_AUDIO 44117.647f                      /* the I2S clock, not 44,100 */
-#define LUCCA_VERSION APP_VER                    /* this firmware's version (the ABOUT page): build.sh --release X.Y */
-#define LUCCA_AUTHOR "JazzMasterT"
+#define KH_VERSION APP_VER                    /* this firmware's version (the ABOUT page): build.sh --release X.Y */
+#define KH_AUTHOR "JazzMasterT"
 static const uint8_t RATE_TPS[6] = {24u, 12u, 8u, 6u, 4u, 3u};   /* MIDI clock ticks a step */
 static const char *const RATE_NAME[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
 
@@ -863,14 +864,16 @@ static void graphic(int32_t y0, int32_t h)       /* the page's picture */
         (void)lc;
     } else if (pg->gfx == G_ABOUT) {             /* who, which version */
         char b[48], *p;
-        cv_text(120 - text_w(&FONT_L, "LUCCA") / 2, y0 - 2, &FONT_L, "LUCCA", K_AMBER);
-        cv_text(120 - text_w(&FONT_S, "das Bassmaschine") / 2, y0 + 30, &FONT_S, "das Bassmaschine", K_TEXT);
-        cv_text(120 - text_w(&FONT_S, "by " LUCCA_AUTHOR) / 2, y0 + 48, &FONT_S, "by " LUCCA_AUTHOR, K_CYAN);
-        p = s_cat(b, LUCCA_VERSION[0] >= '0' && LUCCA_VERSION[0] <= '9' ? "v" : "");   /* v1.0, or "dev" */
-        p = s_cat(p, LUCCA_VERSION "  "); s_cat(p, __DATE__);
+        cv_text(120 - text_w(&FONT_L, "KURZHAAR") / 2, y0 - 2, &FONT_L, "KURZHAAR", K_AMBER);
+        cv_text(120 - text_w(&FONT_S, "der Basshund") / 2, y0 + 30, &FONT_S, "der Basshund", K_TEXT);
+        /* the GPL's "appropriate legal notices" (section 0, 5d): the copyright, no warranty, the licence and where
+         * to read it (the info line below: gnu.org); the platform's authors: LICENSING.md */
+        cv_text(120 - text_w(&FONT_S, "(C) 2026 " KH_AUTHOR) / 2, y0 + 48, &FONT_S, "(C) 2026 " KH_AUTHOR, K_CYAN);
+        p = s_cat(b, KH_VERSION[0] >= '0' && KH_VERSION[0] <= '9' ? "v" : "");   /* v1.0, or "dev" */
+        p = s_cat(p, KH_VERSION "  "); s_cat(p, __DATE__);
         cv_text(120 - text_w(&FONT_S, b) / 2, y0 + 64, &FONT_S, b, K_MUTE);
-        cv_text(120 - text_w(&FONT_S, "(C) 2026 " LUCCA_AUTHOR) / 2, y0 + 80, &FONT_S, "(C) 2026 " LUCCA_AUTHOR, K_MUTE);
-        cv_text(120 - text_w(&FONT_S, "GPL-3.0: Dinghy, Felucca") / 2, y0 + 96, &FONT_S, "GPL-3.0: Dinghy, Felucca", K_DIM);
+        cv_text(120 - text_w(&FONT_S, "on Dinghy and Felucca") / 2, y0 + 80, &FONT_S, "on Dinghy and Felucca", K_MUTE);
+        cv_text(120 - text_w(&FONT_S, "GPL-3.0  NO WARRANTY") / 2, y0 + 96, &FONT_S, "GPL-3.0  NO WARRANTY", K_TEXT);
         (void)px; (void)py;
     } else if (pg->gfx == G_MIDI) {              /* MIDI, and the audio interrupt's load */
         char b[40], *p;
@@ -942,7 +945,8 @@ static void draw_info(void)
         p = s_cat(p, "STEP REC "); p = s_int(p, ui.cursor + 1); p = s_cat(p, "/"); p = s_int(p, pat()->len);
         if (ui.arm_acc) p = s_cat(p, " ACC"); if (ui.arm_slide) s_cat(p, " SLD");
         c = K_CORAL;
-    } else {
+    } else if (cur_page()->gfx == G_ABOUT) s_cat(b, "gnu.org/licenses/gpl-3.0");   /* the licence's text */
+    else {
         p = s_cat(p, "PATCH "); p = s_int(p, (int32_t)patch_no + 1); p = s_cat(p, " ");
         s_cat(p, patch_no < BE_NPATCH ? BE_PATCH_NAME[patch_no] : "USER");
     }

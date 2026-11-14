@@ -1,6 +1,6 @@
 > **This is Dinghy's own README**, kept for the platform it documents (the toolchain, host mode, the rules, the
-> API). Lucca is built on Dinghy; [the README](../README.md) is Lucca's. In this tree `./build.sh` and
-> `tests/run_host.sh` build Lucca; for Dinghy's app set `DINGHY_APP=dinghy`. The upstream:
+> API). Kurzhaar is built on Dinghy; [the README](../README.md) is Kurzhaar's. In this tree `./build.sh` and
+> `tests/run_host.sh` build Kurzhaar; for Dinghy's app set `DINGHY_APP=dinghy`. The upstream:
 > <https://github.com/zvenson/dinghy>.
 
 
