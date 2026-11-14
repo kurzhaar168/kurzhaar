@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Modified by JazzMasterT, 2026-11: the app sets the output level (FM1_OUT_SHIFT); host-mode stand-ins;
- * platform_midi_catchup (MIDI stamped on time during a render). */
+ * platform_midi_catchup (MIDI stamped on time during a render); FM1_USB_PRE_MASTER (USB audio before the MASTER knob). */
 /* Dinghy's platform: everything an FM-1 (or SMK-37) firmware needs before it can be fun, taken unchanged from
  * SLOOP / Felucca / sloopDX / OberVave and wired up here. You should not need to touch this file.
  *
@@ -402,6 +402,10 @@ static void platform_midi_catchup(void)
 #ifndef FM1_OUT_SHIFT
 #define FM1_OUT_SHIFT 7
 #endif
+#ifndef FM1_USB_PRE_MASTER
+#define FM1_USB_PRE_MASTER 0                    /* 1: the USB audio input takes the app's output before the MASTER knob
+                                                   (a fixed level to record; MASTER only sets the speaker and phones) */
+#endif
 static int32_t abuf[2u * HALF_WORDS] __attribute__((aligned(4)));
 static volatile int32_t master_q12 = 2048;
 static void app_audio(int32_t *out, uint32_t n);
@@ -426,12 +430,18 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
         in_audio = 0;
         return;
 #endif
+#if FM1_USB_PRE_MASTER
+        for (b = 0; b < HALF_FRAMES; b += 32u)
+            UAC_ONLY(uac_tap(o + 2u * b, 32u));   /* the computer records the app, at its own level */
+#endif
         for (i = 0; i < HALF_WORDS; i++) {
             int32_t v = (o[i] * master_q12) >> 12;
             o[i] = v > 32767 ? 32767 : v < -32767 ? -32767 : v;
         }
+#if !FM1_USB_PRE_MASTER
         for (b = 0; b < HALF_FRAMES; b += 32u)
             UAC_ONLY(uac_tap(o + 2u * b, 32u));   /* the computer records what the speaker plays */
+#endif
         for (i = 0; i < HALF_WORDS; i++)
             o[i] <<= FM1_OUT_SHIFT;
         fm1_audio_ack_half();

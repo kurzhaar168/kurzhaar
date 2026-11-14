@@ -77,8 +77,8 @@ Connect the FM-1 over USB. It appears as a MIDI port named **Kurzhaar FM-1**.
 - **Automation:** CC 74 is cutoff and CC 71 is resonance, received and/or sent (GLO › MIDI › CC).
 - **Patches:** a program change (1–32) selects the patch.
 - **Audio, two ways:**
-  - **Over USB:** the FM-1 is also a USB audio input, **Kurzhaar FM-1**: 16-bit stereo at 44.1 or 48 kHz, exactly
-    what the headphone output plays (after the MASTER knob). Nothing to set up. With another interface as your
+  - **Over USB:** the FM-1 is also a USB audio input, **Kurzhaar FM-1**: 16-bit stereo at 44.1 or 48 kHz, at a
+    fixed level: the MASTER knob sets only the speaker and headphones, so turning them down does not change a recording. Nothing to set up. With another interface as your
     DAW's audio device, combine the two in an aggregate device (macOS: Audio MIDI Setup).
   - **Analog:** the headphone output into your interface's line input.
 

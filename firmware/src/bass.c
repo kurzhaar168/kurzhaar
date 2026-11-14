@@ -19,6 +19,7 @@ static void app_idle(void);
 #define APP_USB_PRODUCT "Kurzhaar FM-1"             /* USB: the MIDI port's name (the update loader keeps its own) */
 #define FM1_OUT_SHIFT 8                          /* the DAC's full range: +6 dB on Dinghy (our limiter holds the peaks
                                                     below full scale; the output was measured clean to -1 dBFS) */
+#define FM1_USB_PRE_MASTER 1                     /* USB audio at a fixed level: MASTER is the speaker's */
 #include "platform.c"
 #ifdef DINGHY_HOST
 #include "../engine/be.c"                        /* the Mac: one file */
@@ -78,6 +79,19 @@ static uint32_t a_patch_gen = 0xFFFFFFFFu;
 #define LQ 32u                                   /* live notes: note | velocity << 8 (0 = off) */
 static uint16_t lq[LQ];
 static volatile uint32_t lq_w, lq_r;
+#define TQ 32u                                   /* MIDI notes in, with their arrival time (note | velocity << 8) */
+static uint16_t tq[TQ];
+static uint32_t tq_t[TQ];
+static volatile uint32_t tq_w, tq_r;
+#define LIVE_D 320u                              /* a MIDI note plays this many samples (7.3 ms) after it arrived: a
+                                                    block (5.8 ms, the most it can wait for the next one) and room for
+                                                    the main loop, so the delay is the same for every note (it was
+                                                    0..5.8 ms more, by where in a block it came). A DAW takes the
+                                                    constant off with a negative track delay. */
+#define LN 16u                                   /* MIDI notes waiting for their sample (the audio interrupt's) */
+static uint32_t ln_s[LN];
+static uint16_t ln_v[LN];
+static uint32_t ln_r, ln_w;
 #define CQ 64u                                   /* clock / transport: status | d1 << 8 | d2 << 16, with the time */
 static uint32_t cq[CQ], cq_t[CQ];
 static volatile uint32_t cq_w, cq_r;
@@ -98,7 +112,16 @@ static int8_t seq_note_slot = -1;
 static volatile uint32_t isr_t_max, isr_t_sum, isr_t_n;
 static uint32_t cpu_avg10, cpu_max10;            /* the last second's load, in 0.1 % (the MIDI page shows it) */
 
-static void live_note(uint32_t note, uint32_t vel)          /* main loop */
+static void midi_note(uint32_t note, uint32_t vel, uint32_t t)   /* main loop: a MIDI note, arrived at fm1_ticks t */
+{
+    uint32_t w = tq_w;
+    if (w - tq_r >= TQ) return;
+    tq[w & (TQ - 1u)] = (uint16_t)((note & 127u) | (vel & 127u) << 8);
+    tq_t[w & (TQ - 1u)] = t;
+    tq_w = w + 1u;
+}
+
+static void live_note(uint32_t note, uint32_t vel)          /* main loop: the keys, at once */
 {
     uint32_t w = lq_w;
     if (w - lq_r >= LQ) return;
@@ -210,6 +233,14 @@ static void app_audio(int32_t *out, uint32_t n)
         if (v >> 8) be_note_on(&eng, (uint8_t)(v & 127u), (uint8_t)(v >> 8));
         else be_note_off(&eng, (uint8_t)(v & 127u));
     }
+    while (tq_r != tq_w && ln_w - ln_r < LN) {   /* MIDI notes: at their arrival sample + LIVE_D */
+        uint32_t v = tq[tq_r & (TQ - 1u)], tt = tq_t[tq_r & (TQ - 1u)];
+        float off = (float)(int32_t)(tt - t0) * a_r;
+        tq_r++;
+        ln_s[ln_w & (LN - 1u)] = aS + (uint32_t)((int32_t)(off + (off >= 0.0f ? 0.5f : -0.5f)) + (int32_t)LIVE_D);
+        ln_v[ln_w & (LN - 1u)] = (uint16_t)v;
+        ln_w++;
+    }
     while (cq_r != cq_w) {                       /* clock and transport, each at its arrival sample */
         uint32_t m = cq[cq_r & (CQ - 1u)], tt = cq_t[cq_r & (CQ - 1u)], st = m & 0xFFu;
         float off = (float)(int32_t)(tt - t0) * a_r;
@@ -258,6 +289,11 @@ static void app_audio(int32_t *out, uint32_t n)
                 if (oo < next) { next = oo; which = k; }
             }
         if (e < a_nev && a_ev[e].off < next) { next = a_ev[e].off; which = 0x80u; }   /* offs first at a tie */
+        if (ln_r != ln_w) {                      /* the next MIDI note (in order of arrival; one late plays now) */
+            int32_t o = (int32_t)(ln_s[ln_r & (LN - 1u)] - aS);
+            uint32_t oo = o < (int32_t)pos ? pos : (uint32_t)o;
+            if (oo < next) { next = oo; which = 0x40u; }
+        }
         while (pos < next) {                     /* in slices of <= 0.36 ms, MIDI fetched between them: a clock tick
                                                     is stamped on arrival, not after the render (platform.c) */
             uint32_t m = next - pos > RSLICE ? RSLICE : next - pos;
@@ -267,6 +303,12 @@ static void app_audio(int32_t *out, uint32_t n)
         }
         if (which == 0xFFu) break;
         if (which == 0x80u) { a_play_step(aS + a_ev[e].off); e++; }
+        else if (which == 0x40u) {
+            uint32_t v = ln_v[ln_r & (LN - 1u)];
+            ln_r++;
+            if (v >> 8) be_note_on(&eng, (uint8_t)(v & 127u), (uint8_t)(v >> 8));
+            else be_note_off(&eng, (uint8_t)(v & 127u));
+        }
         else {
             be_note_off(&eng, off_n[which]);
             out_q(0x80u | out_ch(), off_n[which], 0);
@@ -670,6 +712,7 @@ static int store_save(void)
 #define K_CYAN RGB(90, 209, 230)
 #define K_CORAL RGB(255, 106, 77)
 #define K_CUR RGB(60, 26, 20)
+#define K_SWEEP RGB(46, 35, 16)                    /* the filter envelope's sweep (FILTER page) */
 #define K_GREEN RGB(121, 224, 139)
 
 #include "splash.h"                             /* the power-on splash (the logo, the dog) */
@@ -763,13 +806,29 @@ static void lane(int32_t y0, int32_t h, int seqview, int32_t pidx, int32_t c0, i
     }
 }
 
-static float lg2(float x)                        /* log2, roughly (for drawing) */
+static float lg2(float x)                        /* log2, to ~1e-5 (the octave, then an atanh series on 1..2) */
 {
-    float e = 0.0f;
+    float e = 0.0f, t, t2;
     if (x <= 0.0f) return -30.0f;
     while (x >= 2.0f) { x *= 0.5f; e += 1.0f; }
     while (x < 1.0f) { x *= 2.0f; e -= 1.0f; }
-    return e + (x - 1.0f) * (1.3466f - 0.3466f * x);
+    t = (x - 1.0f) / (x + 1.0f); t2 = t * t;     /* <= 1/3 */
+    return e + 2.88539008f * t * (1.0f + t2 * (0.33333333f + t2 * (0.2f + t2 * (0.14285714f + t2 * 0.11111111f))));
+}
+
+/* the filter's response in dB at f (Hz), linear (small signal): the ladder's four stages G = 1 / (1 + jf/fc), the
+ * output comp G^4 / (1 + r G^4) (2-pole: comp G^2 over the same loop, as be.c taps it), r = 4.15 res, comp = 1 +
+ * bass comp r; then the low cut, a 2-pole Butterworth high-pass: q^4 / (1 + q^4) */
+static float filter_db(const be_patch_t *pp, float f, float fc)
+{
+    float w = f / fc, d = 1.0f / (1.0f + w * w), gr = d, gi = -w * d, ar, ai, br, bi, nr, ni, m2;
+    float r = be_clamp(pp->res, 0.0f, 1.0f) * 4.15f, comp = 1.0f + be_clamp(pp->bass_comp, 0.0f, 1.0f) * r;
+    ar = gr * gr - gi * gi; ai = 2.0f * gr * gi;               /* G^2 */
+    br = ar * ar - ai * ai; bi = 2.0f * ar * ai;               /* G^4 */
+    nr = pp->pole2 > 0.5f ? ar : br; ni = pp->pole2 > 0.5f ? ai : bi;
+    m2 = comp * comp * (nr * nr + ni * ni) / ((1.0f + r * br) * (1.0f + r * br) + r * r * bi * bi + 1e-12f);
+    if (pp->hpf > 1.0f) { float q = f / be_clamp(pp->hpf, 5.0f, 200.0f), q4 = q * q * q * q; m2 *= q4 / (1.0f + q4); }
+    return 3.0103f * lg2(m2 + 1e-12f);
 }
 
 static void graphic(int32_t y0, int32_t h)       /* the page's picture */
@@ -794,18 +853,47 @@ static void graphic(int32_t y0, int32_t h)       /* the page's picture */
             v = (2.0f * ph - 1.0f) * (1.0f - 0.5f * ui_patch.sub_level) + ui_patch.sub_level * (ps < 0.5f ? 0.7f : -0.7f);
             PLOT(10 + x, y0 + h / 2 - (int32_t)(v * (float)h * 0.3f));
         }
-    } else if (pg->gfx == G_FILTER) {   /* FILTER, TONE: the response, 20 Hz .. 20 kHz */
-        float lc = lg2(ui_patch.cutoff / 20.0f);
-        for (i = 1; i < 4u; i++) cv_rect(10, y0 + (int32_t)i * h / 4, 220, 1, K_GRID);
-        for (x = 0; x <= 220; x++) {
-            float lf = (float)x / 220.0f * 9.966f, r = lf - lc, mag, pk, db;   /* octaves above 20 Hz, above cutoff */
-            float poles = ui_patch.pole2 > 0.5f ? 2.0f : 4.0f, d = r > 0.0f ? r : 0.0f;
-            pk = ui_patch.res * 14.0f / (1.0f + r * r * 9.0f);
-            db = -6.02f * poles * d + pk - ui_patch.res * 8.0f * (1.0f - ui_patch.bass_comp) * (r < 0.0f ? 1.0f : 0.0f);
-            mag = db;
-            PLOT(10 + x, y0 + 14 - (int32_t)(mag * (float)(h - 24) / 60.0f) > y0 + h - 2 ? y0 + h - 2 : y0 + 14 - (int32_t)(mag * (float)(h - 24) / 60.0f));
+    } else if (pg->gfx == G_FILTER) {   /* FILTER, TONE: the response, 20 Hz .. 20 kHz, +18 .. -42 dB; dim: at the
+                                           filter envelope's peak */
+        static const uint16_t FM[3] = {100u, 1000u, 10000u};
+        static const char *const FL[3] = {"100", "1K", "10K"};
+        const int32_t top = y0 + 2, bot = y0 + h - 14;           /* +18 dB .. -42 dB */
+        float fc = be_clamp(ui_patch.cutoff, 8.0f, 20000.0f), fe = fc * be_exp2(be_clamp(ui_patch.fenv_amt, -10.0f, 10.0f));
+        int32_t pass;
+#define FX_(F) (10 + (int32_t)(lg2((F) / 20.0f) / 9.96578f * 220.0f + 0.5f))
+#define DBY(D) (top + (int32_t)((18.0f - (D)) * (float)(bot - top) / 60.0f + 0.5f))
+        for (i = 0; i < 3u; i++) {
+            int32_t fx = FX_((float)FM[i]);
+            cv_rect(fx, top, 1, bot - top, K_GRID);
+            cv_text(fx - text_w(&FONT_S, FL[i]) / 2, bot + 1, &FONT_S, FL[i], K_DIM);
         }
-        cv_rect(10 + (int32_t)(lc / 9.966f * 220.0f), y0 + 4, 1, h - 10, K_CYAN);
+        cv_rect(10, DBY(0.0f), 220, 1, K_DIM);                   /* 0 dB */
+        cv_rect(10, DBY(-24.0f), 220, 1, K_GRID);
+        fe = be_clamp(fe, 8.0f, 20000.0f);
+        {
+            static uint8_t yr[111], ye[111];                     /* the curves, every 2nd pixel (y - y0) */
+            int env = ui_patch.fenv_amt > 0.05f && fe > fc * 1.05f;
+            for (x = 0; x <= 220; x += 2) {
+                float f = 20.0f * be_exp2((float)x / 220.0f * 9.96578f), d0 = filter_db(&ui_patch, f, fc);
+                yr[x / 2] = (uint8_t)(DBY(d0 < -42.0f ? -42.0f : d0 > 18.0f ? 18.0f : d0) - y0);
+                if (env) { float d1 = filter_db(&ui_patch, f, fe); ye[x / 2] = (uint8_t)(DBY(d1 < -42.0f ? -42.0f : d1 > 18.0f ? 18.0f : d1) - y0); }
+            }
+            if (env)                                             /* the sweep: what the envelope opens, filled */
+                for (x = 0; x < 220; x += 2) {
+                    int32_t a0 = y0 + ye[x / 2], a1 = y0 + yr[x / 2];
+                    if (a1 > a0 + 1) cv_rect(10 + x, a0 + 1, 2, a1 - a0 - 1, K_SWEEP);
+                }
+            for (pass = env ? 0 : 1; pass < 2; pass++) {
+                const uint8_t *yv = pass ? yr : ye;
+                for (x = 2; x <= 220; x += 2) {
+                    int32_t ya = y0 + yv[x / 2 - 1], yb = y0 + yv[x / 2];
+                    if (ya < bot || yb < bot) cv_line(8 + x, ya, 10 + x, yb, pass ? K_AMBER : K_DIM);   /* (not along the floor) */
+                }
+            }
+        }
+        { int32_t cx = FX_(fc), yy; for (yy = top; yy < bot; yy += 4) cv_rect(cx, yy, 1, 2, K_CYAN); }   /* the cutoff */
+#undef FX_
+#undef DBY
     } else if (pg->gfx == G_FENV || pg->gfx == G_AENV) {   /* an envelope */
         int fe = pg->gfx == G_FENV;
         float a = fe ? ui_patch.f_a : ui_patch.a_a, d = fe ? ui_patch.f_d : ui_patch.a_d, s = fe ? ui_patch.f_s : ui_patch.a_s;
@@ -1316,13 +1404,30 @@ static void leds(void)
 static uint32_t idle_ok;
 static uint8_t cc_sent[2] = {0xFFu, 0xFFu};      /* the cutoff and resonance last sent or received (no echo) */
 
+static float cutoff_cc(uint32_t v) { return 20.0f * be_exp2((float)v * (9.96578f / 127.0f)); }   /* CC 74: 20 Hz..20 kHz */
+static uint32_t cc_cutoff(float hz)              /* the inverse, exact: the CC whose cutoff is nearest (lg2 is rough: alone
+                                                    it sent most received values back changed, and a DAW took that for a
+                                                    hand on the control and left its automation) */
+{
+    int32_t v = (int32_t)(be_clamp(lg2(hz / 20.0f) / 9.96578f, 0.0f, 1.0f) * 127.0f + 0.5f), best = v, k;
+    float e = 1e30f;
+    for (k = v - 6; k <= v + 6; k++) {          /* (lg2 is up to 0.35 octave off: 4.5 CC steps) */
+        float r;
+        if (k < 0 || k > 127) continue;
+        r = cutoff_cc((uint32_t)k) / hz;
+        if (r < 1.0f) r = 1.0f / r;
+        if (r < e) { e = r; best = k; }
+    }
+    return (uint32_t)best;
+}
+
 static void cc_out(void)                         /* the filter's knobs out as CC 74 / 71 (a DAW can record them) */
 {
     static uint32_t t_last;
     uint32_t v[2], k;
     if (!(glo.cc & 2u) || fm1_ms - t_last < 15u) return;
     t_last = fm1_ms;
-    v[0] = (uint32_t)(be_clamp(lg2(ui_patch.cutoff / 20.0f) / 9.96578f, 0.0f, 1.0f) * 127.0f + 0.5f);
+    v[0] = cc_cutoff(ui_patch.cutoff);
     v[1] = (uint32_t)(be_clamp(ui_patch.res, 0.0f, 1.0f) * 127.0f + 0.5f);
     for (k = 0; k < 2u; k++)
         if (v[k] != cc_sent[k]) { cc_sent[k] = (uint8_t)v[k]; midi_send(0xB0u | out_ch(), k ? 71u : 74u, v[k]); }
@@ -1337,16 +1442,16 @@ static void midi_in(void)
         if (st >= 0xF8u || st == 0xF2u) { clock_msg(st | (uint32_t)d1 << 8 | (uint32_t)d2 << 16, t); dirty |= D_HDR; continue; }
         if (glo.midi_ch && (st & 15u) != glo.midi_ch - 1u) continue;
         if (ty == 0xB0u && (glo.cc & 1u) && (d1 == 74u || d1 == 71u)) {   /* the DAW moves the filter */
-            if (d1 == 74u) { ui_patch.cutoff = 20.0f * be_exp2((float)d2 * (9.96578f / 127.0f)); cc_sent[0] = d2; }
+            if (d1 == 74u) { ui_patch.cutoff = cutoff_cc(d2); cc_sent[0] = d2; }
             else { ui_patch.res = (float)d2 * (1.0f / 127.0f); cc_sent[1] = d2; }
             patch_touched();
             continue;
         }
         if (ty == 0xC0u) { select_patch(d1); continue; }   /* program change: the DAW picks the patch (1..32) */
         if (ty == 0x90u && d2) {
-            live_note(d1, d2);
+            midi_note(d1, d2, t);
             if (ui.rec && a_running && play_idx >= 0) { snapshot(); write_step(play_idx, 0, 0, d1, d2 >= 100u ? SEQ_ACC : 0u); dirty |= D_MID; }
-        } else if (ty == 0x80u || ty == 0x90u) live_note(d1, 0);
+        } else if (ty == 0x80u || ty == 0x90u) midi_note(d1, 0, t);
     }
 }
 static void app_idle(void) { if (idle_ok) midi_in(); }
