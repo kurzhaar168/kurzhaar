@@ -19,7 +19,7 @@ def build():
         return
     BIN.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["cc", "-O2", "-std=c99", "-Wall", "-Wextra", "-Wno-unused-function", "-o", str(BIN),
-                    str(ROOT / "tests" / "render.c")], check=True)
+                    str(ROOT / "tests" / "render.c"), "-lm"], check=True)   # (-lm: Linux links libm only when asked)
 
 
 def events(midi_path, tail_s=1.5):
