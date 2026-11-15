@@ -82,7 +82,8 @@ int main(void)
                     if (!(p.s[i].flags & SEQ_ON)) continue;
                     on_total++;
                     CHECK(seq_chrom(&p.s[i]) == 0, "generate: in the scale");
-                    CHECK(seq_note(&kk, &p.s[i]) >= 12 && seq_note(&kk, &p.s[i]) <= 72, "generate: a bass range note (%d)", seq_note(&kk, &p.s[i]));
+                    { seq_key_t k0 = kk; k0.transpose = 0;   /* (before TRANSP, which moves a new line like any other) */
+                      CHECK(seq_note(&k0, &p.s[i]) >= 33 && seq_note(&k0, &p.s[i]) <= 59, "generate: the root in C2..B2, nothing below A1 (%d)", seq_note(&k0, &p.s[i])); }
                 }
                 first = p.s[0];
                 changed = seq_mutate(&kk, &p, &rng);

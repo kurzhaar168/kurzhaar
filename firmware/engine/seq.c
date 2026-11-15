@@ -119,7 +119,8 @@ void seq_generate(const seq_key_t *k, seq_pat_t *p, uint32_t *rng)
      * what they play: mostly the root, then its octave, the fifth, the third, the seventh below, the fourth */
     static const uint8_t ON_PCT[16] = {100, 25, 55, 40, 80, 25, 55, 45, 95, 25, 55, 40, 75, 30, 55, 45};
     static const struct { int8_t semis, oct; uint8_t w; } NOTE[] = {
-        {0, 0, 44}, {0, 1, 15}, {7, 0, 14}, {3, 0, 9}, {10, -1, 9}, {5, 0, 9}};
+        {0, 1, 44}, {0, 2, 15}, {7, 1, 14}, {3, 1, 9}, {10, 0, 9}, {5, 1, 9}};   /* (octave 1: the root in C2..B2, where
+                                                    the keyboard writes at OCT 0; octave 0 put a C root at 33 Hz) */
     uint32_t i, j;
     seq_clear(p, 16);
     for (i = 0; i < 16u; i++) {
@@ -129,7 +130,7 @@ void seq_generate(const seq_key_t *k, seq_pat_t *p, uint32_t *rng)
         r = rnd(rng) % 100u;
         for (j = 0; j + 1u < sizeof NOTE / sizeof NOTE[0] && r >= NOTE[j].w; j++) r -= NOTE[j].w;
         s->flags = SEQ_ON;
-        s->deg = (int8_t)(deg_near(k, NOTE[j].semis) - k->transpose);
+        s->deg = (int8_t)deg_near(k, NOTE[j].semis);   /* (TRANSP moves it, as it moves every pattern) */
         s->oct = NOTE[j].oct;
         s->gate_chrom = (uint8_t)(chance(rng, 70) ? SEQ_GATE50 : chance(rng, 50) ? SEQ_GATE75 : SEQ_GATE25);
         if (i == 0u || chance(rng, 18)) s->flags |= SEQ_ACC;
@@ -143,6 +144,7 @@ void seq_generate(const seq_key_t *k, seq_pat_t *p, uint32_t *rng)
 uint32_t seq_mutate(const seq_key_t *k, seq_pat_t *p, uint32_t *rng)
 {
     uint32_t n = 2u + rnd(rng) % 2u, done = 0, tries;
+    int8_t base = (p->s[0].flags & SEQ_ON) && !(p->s[0].flags & SEQ_TIE) ? p->s[0].oct : 1;   /* the anchor's octave */
     for (tries = 0; done < n && tries < 40u; tries++) {
         uint32_t i = 1u + rnd(rng) % (p->len > 1u ? p->len - 1u : 1u);   /* never the first step: the anchor */
         seq_step_t s = p->s[i];
@@ -150,13 +152,13 @@ uint32_t seq_mutate(const seq_key_t *k, seq_pat_t *p, uint32_t *rng)
         if (s.flags & SEQ_TIE) continue;
         if (!(s.flags & SEQ_ON)) {               /* an empty step: sometimes a note appears (the root or its octave) */
             if (what >= 35u) continue;
-            s.flags = SEQ_ON; s.deg = (int8_t)(-k->transpose); s.oct = (int8_t)(chance(rng, 50) ? 1 : 0);
+            s.flags = SEQ_ON; s.deg = 0; s.oct = (int8_t)(base + (chance(rng, 50) ? 1 : 0));
             s.gate_chrom = SEQ_GATE50;
         } else if (what < 40u) {                 /* a neighbouring note in the scale */
             s.deg = (int8_t)(s.deg + (chance(rng, 50) ? 1 : -1) * (chance(rng, 70) ? 1 : 2));
             s.gate_chrom &= 3u;
         } else if (what < 60u) {                 /* an octave jump, back toward the middle */
-            s.oct = (int8_t)(s.oct > 0 ? s.oct - 1 : s.oct < 0 ? s.oct + 1 : (chance(rng, 50) ? 1 : -1));
+            s.oct = (int8_t)(s.oct > base ? s.oct - 1 : s.oct < base ? s.oct + 1 : base + (chance(rng, 50) ? 1 : -1));
         } else if (what < 75u) s.flags ^= SEQ_ACC;
         else if (what < 88u) s.flags ^= SEQ_SLIDE;
         else s.flags = 0;                        /* a rest */
